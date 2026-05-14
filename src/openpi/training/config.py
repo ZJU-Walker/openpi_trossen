@@ -727,6 +727,49 @@ _CONFIGS = [
         ema_decay=None,
         save_interval=5000,
     ),
+    # TODO added by Ke for human robot packing task
+    # LoRA finetune of pi05 on the local Trossen AI Solo `pack_with_human` dataset
+    # (/iris/projects/humanoid/trossen_data/pack_with_human, 51 episodes, 3 cameras,
+    # no cam_low). Set HF_LEROBOT_HOME=/iris/projects/humanoid/trossen_data before
+    # running compute_norm_stats.py / train.py so repo_id resolves locally.
+    TrainConfig(
+        name="pi05_trossen_pack_with_human",
+        model=pi0_config.Pi0Config(pi05=True),
+        data=LeRobotAlohaDataConfig(
+            use_delta_joint_actions=False,
+            adapt_to_pi=False,
+            repo_id="pack_with_human",
+            assets=AssetsConfig(
+                assets_dir="gs://openpi-assets/checkpoints/pi05_base/assets",
+                asset_id="trossen",
+            ),
+            default_prompt="help a human pack a box",
+            repack_transforms=_transforms.Group(
+                inputs=[
+                    _transforms.RepackTransform(
+                        {
+                            "images": {
+                                "cam_high": "observation.images.cam_high",
+                                "cam_left_wrist": "observation.images.cam_left_wrist",
+                                "cam_right_wrist": "observation.images.cam_right_wrist",
+                            },
+                            "state": "observation.state",
+                            "actions": "action",
+                        }
+                    )
+                ]
+            ),
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_base/params"),
+        num_train_steps=30_000,
+        batch_size=16,
+        freeze_filter=pi0_config.Pi0Config(
+            paligemma_variant="gemma_2b_lora", action_expert_variant="gemma_300m_lora"
+        ).get_freeze_filter(),
+        # Turn off EMA for LoRA finetuning.
+        ema_decay=None,
+        save_interval=5000,
+    ),
     # This is an example of a long horizon task finetuned from pi0 base model using LoRA.
     TrainConfig(
         name="pi0_trossen_organize_tools",

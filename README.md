@@ -11,6 +11,104 @@ For all models, we provide _base model_ checkpoints, pre-trained on 10k+ hours o
 
 This is an experiment: $\pi_0$ was developed for our own robots, which differ from the widely used platforms such as [ALOHA](https://tonyzhaozh.github.io/aloha/) and [DROID](https://droid-dataset.github.io/), and though we are optimistic that researchers and practitioners will be able to run creative new experiments adapting $\pi_0$ to their own platforms, we do not expect every such attempt to be successful. All this is to say: $\pi_0$ may or may not work for you, but you are welcome to try it and see!
 
+---
+
+## Quickstart: Finetune π0.5 on a Local Trossen Dataset (`pack_with_human`)
+
+End-to-end recipe for LoRA-finetuning π0.5 on the Trossen AI Solo dataset at `/iris/projects/humanoid/trossen_data/pack_with_human` (51 episodes, 14-DOF bimanual, 3 cameras: `cam_high`, `cam_left_wrist`, `cam_right_wrist`, 30 fps). Target hardware: single H100 80 GB.
+
+### 1. Install dependencies (one-time)
+
+```bash
+cd /iris/projects/humanoid/ke/openpi_trossen
+GIT_LFS_SKIP_SMUDGE=1 uv sync
+GIT_LFS_SKIP_SMUDGE=1 uv pip install -e .
+```
+
+### 2. Make the local dataset discoverable to LeRobot
+
+LeRobot resolves `repo_id` against `$HF_LEROBOT_HOME` (default `~/.cache/huggingface/lerobot`). Export this before every training command so `repo_id="pack_with_human"` resolves to the on-disk dataset:
+
+```bash
+export HF_LEROBOT_HOME=/iris/projects/humanoid/trossen_data
+```
+
+Sanity-check the dataset loads:
+
+```bash
+uv run python -c "from lerobot.common.datasets.lerobot_dataset import LeRobotDatasetMetadata; print(LeRobotDatasetMetadata('pack_with_human').info['total_episodes'])"
+# expected: 51
+```
+
+### 3. The training config
+
+A `TrainConfig` named `pi05_trossen_pack_with_human` has been added to `src/openpi/training/config.py`. It mirrors `pi05_trossen_organize_tools` but:
+
+- drops the `cam_low` entry (this dataset only has 3 cameras),
+- points `repo_id` at the local `pack_with_human` dataset,
+- sets `default_prompt="help a human pack a box"`,
+- uses `num_train_steps=30_000` (small dataset → shorter run is fine),
+- keeps LoRA freeze filter + `ema_decay=None` like the other LoRA π0.5 configs.
+
+### 4. Compute norm stats (one-time, required)
+
+```bash
+cd /iris/projects/humanoid/ke/openpi_trossen
+export HF_LEROBOT_HOME=/iris/projects/humanoid/trossen_data
+uv run scripts/compute_norm_stats.py pi05_trossen_pack_with_human
+```
+
+See [`docs/norm_stats.md`](docs/norm_stats.md). Training will fail without this step.
+
+### 5. Smoke test (200 steps)
+
+Before kicking off the full run, temporarily set `num_train_steps=200` in the config (or pass `--num-train-steps=200` if your tyro CLI supports it) and run:
+
+```bash
+XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run scripts/train.py \
+    pi05_trossen_pack_with_human \
+    --exp-name=pi05_pack_with_human_smoke \
+    --overwrite
+```
+
+Verify: weights download from GCS, no shape mismatches, loss decreases, a checkpoint lands in `checkpoints/pi05_trossen_pack_with_human/pi05_pack_with_human_smoke/`.
+
+### 6. Full training run
+
+Revert `num_train_steps` to `30_000`, then:
+
+```bash
+cd /iris/projects/humanoid/ke/openpi_trossen
+export HF_LEROBOT_HOME=/iris/projects/humanoid/trossen_data
+XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run scripts/train.py \
+    pi05_trossen_pack_with_human \
+    --exp-name=pi05_pack_with_human_0514 \
+    --overwrite
+```
+
+Checkpoints: `checkpoints/pi05_trossen_pack_with_human/pi05_pack_with_human_v1/<step>/`. With `save_interval=5000`, expect 6 intermediate checkpoints plus the final one at step 29999.
+
+### 7. Inference
+
+Serve the trained policy (run from project root so LeRobot v0.1.0 is used):
+
+```bash
+uv run scripts/serve_policy.py policy:checkpoint \
+    --policy.config=pi05_trossen_pack_with_human \
+    --policy.dir=checkpoints/pi05_trossen_pack_with_human/pi05_pack_with_human_0514/29999
+```
+
+Client setup (separate venv with LeRobot v0.3.2) is in [`examples/trossen_ai/README.md`](examples/trossen_ai/README.md).
+
+### Troubleshooting
+
+- **OOM at startup:** drop `batch_size` to 4 or 2, or lower `XLA_PYTHON_CLIENT_MEM_FRACTION` to 0.85.
+- **`Dataset 'pack_with_human' not found`:** `HF_LEROBOT_HOME` isn't exported in the current shell, or it points at the wrong directory. It must contain `pack_with_human/meta/info.json`.
+- **Shape mismatch on images:** confirm the repack map in `config.py` has exactly 3 camera keys (no `cam_low`).
+- **Weights download fails:** check network access to `gs://openpi-assets/checkpoints/pi05_base/`.
+
+---
+
 ## Updates
 
 - [Sept 2025] We released PyTorch support in openpi.
