@@ -5,7 +5,7 @@
 #SBATCH --nodelist=iris-hgx-1,iris-hgx-2
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=12
-#SBATCH --mem=100G
+#SBATCH --mem=300G
 #SBATCH --time=1-00:00:00
 #SBATCH --output=/iris/u/kewalk/openpi_trossen/logs/human_robot_pack_full_0514/%x-%j.out
 #SBATCH --error=/iris/u/kewalk/openpi_trossen/logs/human_robot_pack_full_0514/%x-%j.err
@@ -13,6 +13,7 @@
 set -euo pipefail
 
 cd /iris/u/kewalk/openpi_trossen
+source /iris/u/kewalk/.bashrc.user
 
 export HF_LEROBOT_HOME=/iris/projects/humanoid/trossen_data
 export XLA_PYTHON_CLIENT_MEM_FRACTION=0.9
@@ -29,5 +30,5 @@ echo "================================================"
 echo "==== Starting training ===="
 uv run scripts/train.py \
     pi05_trossen_pack_with_human_full \
-    --exp-name=pi05_pack_with_human_full_0514 \
+    --exp-name=pi05_pack_with_human_full_0515 \
     --overwrite
