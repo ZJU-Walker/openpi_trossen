@@ -157,8 +157,8 @@ Launch the policy server using your trained checkpoint and configuration:
 Make sure to run this from project root. This allows us to use LeRobot V0.1.0
 ```bash
 uv run scripts/serve_policy.py policy:checkpoint \
-    --policy.config=pi0_trossen_transfer_block \
-    --policy.dir=checkpoints/pi0_trossen_transfer_block/test_pi0_finetuning/19999
+    --policy.config=pi05_trossen_pack_with_human_full \
+    --policy.dir=/iris/u/kewalk/openpi_trossen/checkpoints/pi05_trossen_pack_with_human_full/pi05_pack_with_human_full_0514/2000
 ```
 
 This command serves the trained policy, making it available for inference.
