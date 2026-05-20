@@ -173,4 +173,4 @@ cython_debug/
 
 eval_outputs/
 logs/
-*.jpgs
+*.jpg
