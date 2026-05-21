@@ -814,6 +814,54 @@ _CONFIGS = [
         save_interval=1000,
         keep_period=5000,
     ),
+    # TODO Full-parameter finetune of pi05 on the local Trossen `pack_with_human` dataset,
+    # using RELATIVE (delta) joint actions: the 12 joint dims are predicted as
+    # deltas-from-current-state, both grippers remain absolute
+    # (mask T,T,T,T,T,T,F,T,T,T,T,T,T,F). Norm stats are stored under
+    # asset_id="trossen_delta" so they do not collide with the absolute-action stats
+    # used by the other trossen configs. Run scripts/compute_norm_stats.py for this
+    # config name before training.
+    TrainConfig(
+        name="pi05_trossen_pack_with_human_full_delta",
+        model=pi0_config.Pi0Config(pi05=True),
+        data=LeRobotAlohaDataConfig(
+            use_delta_joint_actions=True,
+            adapt_to_pi=False,
+            repo_id="pack_with_human",
+            assets=AssetsConfig(
+                # No assets_dir override: stats are computed locally into assets/,
+                # not loaded from the pi05_base bucket (which only has absolute-action stats).
+                asset_id="trossen_delta",
+            ),
+            default_prompt="help a human pack a box",
+            repack_transforms=_transforms.Group(
+                inputs=[
+                    _transforms.RepackTransform(
+                        {
+                            "images": {
+                                "cam_high": "observation.images.cam_high",
+                                "cam_left_wrist": "observation.images.cam_left_wrist",
+                                "cam_right_wrist": "observation.images.cam_right_wrist",
+                            },
+                            "state": "observation.state",
+                            "actions": "action",
+                        }
+                    )
+                ]
+            ),
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_base/params"),
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=1_000,
+            peak_lr=2.5e-5,
+            decay_steps=30_000,
+            decay_lr=2.5e-6,
+        ),
+        num_train_steps=30_000,
+        batch_size=64,
+        save_interval=1000,
+        keep_period=5000,
+    ),
     # This is an example of a long horizon task finetuned from pi0 base model using LoRA.
     TrainConfig(
         name="pi0_trossen_organize_tools",
