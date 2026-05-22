@@ -13,11 +13,16 @@ This is an experiment: $\pi_0$ was developed for our own robots, which differ fr
 
 ---
 
-## Quickstart: Finetune π0.5 on a Local Trossen Dataset (`pack_with_human`)
+# trossen_arm
 
-End-to-end recipe for LoRA-finetuning π0.5 on the Trossen AI Solo dataset at `/iris/projects/humanoid/trossen_data/pack_with_human` (51 episodes, 14-DOF bimanual, 3 cameras: `cam_high`, `cam_left_wrist`, `cam_right_wrist`, 30 fps). Target hardware: single H100 80 GB.
+End-to-end recipe for **full-parameter** finetuning of π0.5 on the Trossen AI Solo
+`pack_with_human` dataset, then serving and evaluating the policy. Everything
+specific to the Trossen arm lives in this section.
 
-### 1. Install dependencies (one-time)
+- **Dataset:** `/iris/projects/humanoid/trossen_data/pack_with_human` — 51 episodes, 14-DOF bimanual, 3 cameras (`cam_high`, `cam_left_wrist`, `cam_right_wrist`), 30 fps.
+- **Hardware:** single H100 80 GB.
+
+## 1. Setup
 
 ```bash
 cd /iris/projects/humanoid/ke/openpi_trossen
@@ -25,145 +30,173 @@ GIT_LFS_SKIP_SMUDGE=1 uv sync
 GIT_LFS_SKIP_SMUDGE=1 uv pip install -e .
 ```
 
-### 2. Make the local dataset discoverable to LeRobot
-
-LeRobot resolves `repo_id` against `$HF_LEROBOT_HOME` (default `~/.cache/huggingface/lerobot`). Export this before every training command so `repo_id="pack_with_human"` resolves to the on-disk dataset:
+LeRobot resolves `repo_id` against `$HF_LEROBOT_HOME`. **Every command below
+needs this exported** so `repo_id="pack_with_human"` finds the on-disk dataset:
 
 ```bash
 export HF_LEROBOT_HOME=/iris/projects/humanoid/trossen_data
 ```
 
-Sanity-check the dataset loads:
+Sanity-check the dataset loads (expects `51`):
 
 ```bash
 uv run python -c "from lerobot.common.datasets.lerobot_dataset import LeRobotDatasetMetadata; print(LeRobotDatasetMetadata('pack_with_human').info['total_episodes'])"
-# expected: 51
 ```
 
-### 3. The training config
+## 2. Configs
 
-A `TrainConfig` named `pi05_trossen_pack_with_human` has been added to `src/openpi/training/config.py`. It mirrors `pi05_trossen_organize_tools` but:
+Four full-finetune `TrainConfig`s are registered in `src/openpi/training/config.py`
+(30k steps, cosine LR warmup 1k → 2.5e-5 → 2.5e-6):
 
-- drops the `cam_low` entry (this dataset only has 3 cameras),
-- points `repo_id` at the local `pack_with_human` dataset,
-- sets `default_prompt="help a human pack a box"`,
-- uses `num_train_steps=30_000` (small dataset → shorter run is fine),
-- keeps LoRA freeze filter + `ema_decay=None` like the other LoRA π0.5 configs.
+| Config | Actions | Norm-stats asset |
+|---|---|---|
+| `pi05_trossen_pack_with_human_full` | absolute joint angles | `trossen` |
+| `pi05_trossen_pack_with_human_full_delta` | joints as **deltas** from current state, both grippers absolute (mask `T,T,T,T,T,T,F,T,T,T,T,T,T,F`) | `trossen_delta` |
+| `pi05_trossen_pack_with_human_full_rtc` | absolute joint angles + RTC action-prefix training (`d=0..10`) | `trossen` |
+| `pi05_trossen_pack_with_human_full_delta_rtc` | delta joints + RTC action-prefix training (`d=0..10`) | `trossen_delta` |
 
-### 4. Compute norm stats (one-time, required)
+The delta config sets `use_delta_joint_actions=True` — `DeltaActions` wraps the
+training inputs and `AbsoluteActions` wraps the inference outputs, so the policy
+server still emits absolute joint targets to the robot.
+
+## 3. Train
+
+The steps below apply to any full config — substitute `<config>` with
+`pi05_trossen_pack_with_human_full`, `pi05_trossen_pack_with_human_full_delta`,
+`pi05_trossen_pack_with_human_full_rtc`, or
+`pi05_trossen_pack_with_human_full_delta_rtc`.
+
+For RTC runs, use one of:
 
 ```bash
-cd /iris/projects/humanoid/ke/openpi_trossen
-export HF_LEROBOT_HOME=/iris/projects/humanoid/trossen_data
-uv run scripts/compute_norm_stats.py pi05_trossen_pack_with_human
+export RTC_CONFIG=pi05_trossen_pack_with_human_full_rtc
+# or:
+export RTC_CONFIG=pi05_trossen_pack_with_human_full_delta_rtc
 ```
 
-See [`docs/norm_stats.md`](docs/norm_stats.md). Training will fail without this step.
+**a. Compute norm stats** (one-time, required for delta configs):
 
-### 5. Smoke test (200 steps)
-
-Before kicking off the full run, temporarily set `num_train_steps=200` in the config (or pass `--num-train-steps=200` if your tyro CLI supports it) and run:
-
-```bash
-XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run scripts/train.py \
-    pi05_trossen_pack_with_human \
-    --exp-name=pi05_pack_with_human_smoke \
-    --overwrite
-```
-
-Verify: weights download from GCS, no shape mismatches, loss decreases, a checkpoint lands in `checkpoints/pi05_trossen_pack_with_human/pi05_pack_with_human_smoke/`.
-
-### 6. Full training run
-
-Revert `num_train_steps` to `30_000`, then:
+Absolute configs use the `trossen` stats from the base checkpoint. Delta configs
+need local delta stats; compute the non-RTC delta stats once:
 
 ```bash
-cd /iris/projects/humanoid/ke/openpi_trossen
-export HF_LEROBOT_HOME=/iris/projects/humanoid/trossen_data
-XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run scripts/train.py \
-    pi05_trossen_pack_with_human \
-    --exp-name=pi05_pack_with_human_0514 \
-    --overwrite
-```
-
-Checkpoints: `checkpoints/pi05_trossen_pack_with_human/pi05_pack_with_human_v1/<step>/`. With `save_interval=5000`, expect 6 intermediate checkpoints plus the final one at step 29999.
-
-### 7. Inference
-
-Serve the trained policy (run from project root so LeRobot v0.1.0 is used):
-
-```bash
-uv run scripts/serve_policy.py policy:checkpoint \
-    --policy.config=pi05_trossen_pack_with_human \
-    --policy.dir=checkpoints/pi05_trossen_pack_with_human/pi05_pack_with_human_0514/29999
-```
-
-Client setup (separate venv with LeRobot v0.3.2) is in [`examples/trossen_ai/README.md`](examples/trossen_ai/README.md).
-
-### 8. Full finetune with relative (delta) joint actions
-
-After the LoRA absolute-action run above, the next step is a **full-parameter** finetune that predicts joint actions as **deltas from the current state** instead of absolute joint angles. Both grippers stay absolute (mask `T,T,T,T,T,T,F,T,T,T,T,T,T,F`).
-
-The config is `pi05_trossen_pack_with_human_full_delta` in `src/openpi/training/config.py`. It mirrors `pi05_trossen_pack_with_human_full` exactly (30k steps, batch 32, cosine LR warmup 1k → peak 2.5e-5 → decay 2.5e-6, `save_interval=1000`, `keep_period=5000`) except:
-
-- `use_delta_joint_actions=True` — wraps the pipeline with `DeltaActions` (training inputs) and `AbsoluteActions` (inference outputs), so the policy server still emits absolute joint targets to the robot.
-- `asset_id="trossen_delta"` with no `assets_dir` override — norm stats live in the local `assets/trossen_delta/` folder and do **not** collide with the absolute-action stats used by the other Trossen configs.
-
-#### Compute delta-action norm stats (required, one-time)
-
-Delta-action statistics differ from absolute-action statistics, so the existing `trossen` stats are not valid here. Compute fresh stats for this config:
-
-```bash
-cd /iris/projects/humanoid/ke/openpi_trossen
-export HF_LEROBOT_HOME=/iris/projects/humanoid/trossen_data
 uv run scripts/compute_norm_stats.py pi05_trossen_pack_with_human_full_delta
 ```
 
-This writes to `assets/trossen_delta/pack_with_human/norm_stats.json`. Spot-check that the action `q01`/`q99`/`mean` on the 12 joint dims are roughly centered near zero (delta math kicked in), while the 2 gripper dims (indices 6 and 13) match the absolute-action stats.
+Delta and absolute statistics differ. The delta RTC config reuses the
+`pi05_trossen_pack_with_human_full_delta` stats; do not use absolute `trossen`
+stats for delta training.
 
-#### Smoke test (200 steps)
+**b. Smoke test** (optional) — temporarily set `num_train_steps=200` in the
+config, run the command in step c, and verify weights download, no shape
+mismatches, loss decreases, a checkpoint is written.
 
-Temporarily set `num_train_steps=200` in the config, then:
+**c. Full run** — with `num_train_steps=30_000`:
 
 ```bash
 XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run scripts/train.py \
-    pi05_trossen_pack_with_human_full_delta \
-    --exp-name=pi05_pack_with_human_full_delta_smoke \
+    <config> \
+    --exp-name=pack_with_human_run \
     --overwrite
 ```
 
-#### Full training run
-
-Revert `num_train_steps` to `30_000`, then:
+RTC training command:
 
 ```bash
-cd /iris/projects/humanoid/ke/openpi_trossen
-export HF_LEROBOT_HOME=/iris/projects/humanoid/trossen_data
 XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run scripts/train.py \
-    pi05_trossen_pack_with_human_full_delta \
-    --exp-name=pi05_pack_with_human_full_delta_0518 \
+    "${RTC_CONFIG}" \
+    --exp-name=pack_with_human_rtc \
     --overwrite
 ```
 
-Checkpoints: `checkpoints/pi05_trossen_pack_with_human_full_delta/pi05_pack_with_human_full_delta_0518/<step>/`. With `save_interval=1000` and `keep_period=5000`, expect a checkpoint every 1k steps with permanent retention every 5k.
+Checkpoints land in `checkpoints/<config>/<exp-name>/<step>/`.
 
-#### Inference
+## 4. Serve
+
+Serve a trained checkpoint as a policy server (run from project root):
 
 ```bash
 uv run scripts/serve_policy.py policy:checkpoint \
-    --policy.config=pi05_trossen_pack_with_human_full_delta \
-    --policy.dir=checkpoints/pi05_trossen_pack_with_human_full_delta/pi05_pack_with_human_full_delta_0518/29999
+    --policy.config=<config> \
+    --policy.dir=checkpoints/<config>/<exp-name>/29999
 ```
 
-No client-side changes are needed: `AbsoluteActions` is auto-applied at inference and adds the current state back to the model's delta predictions before they leave the policy server.
+Client setup (separate venv with LeRobot v0.3.2) is in
+[`examples/trossen_ai/README.md`](examples/trossen_ai/README.md).
 
-### Troubleshooting
+## 5. Evaluate
+
+### Offline (against the dataset)
+
+`examples/trossen_ai/eval_offline.py` loads a checkpoint, runs chunked inference
+over one dataset episode, and writes `actions.csv` (ground-truth vs. predicted),
+per-joint plots (`joint_NN.png`, `joints_all.png`), and per-joint MSE to stdout.
+No policy server or robot needed.
+
+```bash
+uv run examples/trossen_ai/eval_offline.py \
+    --config-name <config> \
+    --checkpoint-dir checkpoints/<config>/<exp-name>/29999
+```
+
+### Real robot (live rollout)
+
+`examples/trossen_ai/eval_real.py` drives a Trossen AI Solo against a running
+policy server (start the server in step 4 first). It needs the LeRobot fork at
+`/home/iris/lerobot` (provides `trossen_ai_solo` + OpenCV camera support).
+
+```bash
+python examples/trossen_ai/eval_real.py \
+    --policy_host <host> \
+    --task_prompt "help a human pack a box"
+```
+
+The rollout is keyboard-controlled:
+
+| Key | Action |
+|---|---|
+| `n` | execute the next single action |
+| `c` | continuous: auto-step and auto-replan until interrupted |
+| `r` | re-plan now (discard the current chunk) |
+| `q` | quit |
+
+Useful flags: `--test` runs everything but skips `robot.send_action()` (logs
+what would be sent — safe dry run); `--chunk_size` (default 25) is how many
+actions are consumed per inference; `--control_freq` (default 30) is the control
+rate in Hz.
+
+### Real robot with RTC action-prefix conditioning
+
+Train and serve one of the RTC configs above, then use the async RTC client.
+
+```bash
+uv run scripts/serve_policy.py policy:checkpoint \
+    --policy.config="${RTC_CONFIG}" \
+    --policy.dir="checkpoints/${RTC_CONFIG}/pack_with_human_rtc/29999"
+
+python examples/trossen_ai/eval_real_RTC.py \
+    --policy_host <host> \
+    --task_prompt "help a human pack a box" \
+    --d_est 10 \
+    --chunk_size 25 \
+    --test
+```
+
+RTC notes:
+
+- `eval_real_RTC.py` keeps inference asynchronous while continuing the current action chunk.
+- The client sends the still-unexecuted part of the current chunk as `action_prefix`.
+- `--d_est 10` matches the RTC training prefix range (`d=0..10`); lower it if inference is usually faster.
+- `--chunk_size` caps how many actions are executed open-loop before replanning. Smaller values are more reactive; larger values are smoother but less reactive.
+- Keep `--test` for dry runs; remove it only when ready to send actions to the robot.
+
+## Troubleshooting
 
 - **OOM at startup:** drop `batch_size` to 4 or 2, or lower `XLA_PYTHON_CLIENT_MEM_FRACTION` to 0.85.
 - **`Dataset 'pack_with_human' not found`:** `HF_LEROBOT_HOME` isn't exported in the current shell, or it points at the wrong directory. It must contain `pack_with_human/meta/info.json`.
 - **Shape mismatch on images:** confirm the repack map in `config.py` has exactly 3 camera keys (no `cam_low`).
 - **Weights download fails:** check network access to `gs://openpi-assets/checkpoints/pi05_base/`.
-- **Delta-action run diverges or has huge initial loss:** confirm `assets/trossen_delta/pack_with_human/norm_stats.json` exists and was generated by step 8. Reusing the absolute-action `trossen` stats with the delta config will silently produce wrong normalization.
+- **Delta-action run diverges or has huge initial loss:** confirm `assets/trossen_delta/pack_with_human/norm_stats.json` exists and was generated for `pi05_trossen_pack_with_human_full_delta`. Reusing the absolute-action `trossen` stats with the delta config silently produces wrong normalization.
 
 ---
 
