@@ -19,6 +19,7 @@ import math
 import select
 import sys
 import termios
+import threading
 import time
 import tty
 
@@ -117,6 +118,8 @@ class TrossenOpenPIRTCBridge:
         self._late_rate_limit_steps = 0
         self._executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
         self._pending: PendingChunk | None = None
+        self._request_lock = threading.Lock()
+        self._holding_pending_logged = False
 
     def _active_chunk_limit(self) -> int:
         if self.current_action_chunk is None:
@@ -131,6 +134,7 @@ class TrossenOpenPIRTCBridge:
         self.current_action_chunk = None
         self.action_chunk_idx = 0
         self._pending = None
+        self._holding_pending_logged = False
 
     def get_observation(
         self,
@@ -164,7 +168,8 @@ class TrossenOpenPIRTCBridge:
     ) -> np.ndarray:
         observation = self.get_observation(task_prompt, action_prefix=action_prefix, prefix_length=prefix_length)
         t0 = time.monotonic()
-        response = self.policy_client.infer(observation)
+        with self._request_lock:
+            response = self.policy_client.infer(observation)
         elapsed = (time.monotonic() - t0) * 1000.0
         chunk = np.asarray(response["actions"], dtype=np.float32)
         logger.info(f"Inference: chunk={chunk.shape}  {elapsed:.0f}ms  prefix={prefix_length or 0}")
@@ -175,6 +180,9 @@ class TrossenOpenPIRTCBridge:
             return
 
         start_idx = self.action_chunk_idx
+        if start_idx <= 0:
+            return
+
         chunk_limit = self._active_chunk_limit()
         prefix = self.current_action_chunk[start_idx : min(start_idx + self.d_est, chunk_limit)]
         if len(prefix) == 0:
@@ -196,6 +204,7 @@ class TrossenOpenPIRTCBridge:
 
         pending = self._pending
         self._pending = None
+        self._holding_pending_logged = False
         finish_time = time.monotonic()
         try:
             new_chunk = np.asarray(pending.future.result(), dtype=np.float32)
@@ -226,6 +235,18 @@ class TrossenOpenPIRTCBridge:
             f"d_est={pending.d_est}, d_actual={d_actual}, horizon={new_chunk_limit}"
         )
 
+    def _hold_action_while_pending(self) -> np.ndarray:
+        if not self._holding_pending_logged:
+            logger.warning("Current chunk exhausted while RTC request is pending; holding last action.")
+            self._holding_pending_logged = True
+
+        if self.last_action is not None:
+            return self.last_action.copy()
+        chunk_limit = self._active_chunk_limit()
+        if self.current_action_chunk is not None and chunk_limit > 0:
+            return self.current_action_chunk[chunk_limit - 1].copy()
+        raise RuntimeError("No action available to hold while waiting for RTC inference.")
+
     def _rate_limit(self, action: np.ndarray) -> np.ndarray:
         if self.last_action is None:
             return action
@@ -254,8 +275,11 @@ class TrossenOpenPIRTCBridge:
     def _next_action(self, task_prompt: str, *, continuous_mode: bool) -> np.ndarray:
         self._maybe_accept_async_chunk()
         if self.current_action_chunk is None or self.action_chunk_idx >= self._active_chunk_limit():
+            if self._pending is not None:
+                return self._hold_action_while_pending()
             self.current_action_chunk = self.request_chunk(task_prompt)
             self.action_chunk_idx = 0
+            self._holding_pending_logged = False
 
         if continuous_mode:
             self._launch_async_request(task_prompt)
