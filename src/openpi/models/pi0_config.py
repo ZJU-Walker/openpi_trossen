@@ -31,12 +31,25 @@ class Pi0Config(_model.BaseModelConfig):
     pi05: bool = False
     # This config option is not used directly by the model, but it is read by the ModelTransformFactory.
     discrete_state_input: bool = None  # type: ignore
+    # Training-time real-time control (RTC) action-prefix conditioning. When enabled, the first
+    # `d` action tokens are treated as already-known clean actions and the loss is applied only to
+    # the remaining postfix tokens.
+    rtc_prefix_min_length: int = 0
+    rtc_prefix_max_length: int = 0
+    # Kept at the production pi0/pi0.5 image encoder by default. Tests can use a tiny variant.
+    siglip_variant: str = "So400m/14"
 
     def __post_init__(self):
         if self.max_token_len is None:
             object.__setattr__(self, "max_token_len", 200 if self.pi05 else 48)
         if self.discrete_state_input is None:
             object.__setattr__(self, "discrete_state_input", self.pi05)
+        if self.rtc_prefix_min_length < 0:
+            raise ValueError("rtc_prefix_min_length must be non-negative.")
+        if self.rtc_prefix_max_length < self.rtc_prefix_min_length:
+            raise ValueError("rtc_prefix_max_length must be greater than or equal to rtc_prefix_min_length.")
+        if self.rtc_prefix_max_length >= self.action_horizon:
+            raise ValueError("rtc_prefix_max_length must be smaller than action_horizon.")
 
     @property
     @override

@@ -769,7 +769,7 @@ _CONFIGS = [
         # Turn off EMA for LoRA finetuning.
         ema_decay=None,
         save_interval=1000,
-        keep_period=5000,  
+        keep_period=5000,
     ),
     # TODO Full-parameter finetune of pi05 on the local Trossen `pack_with_human` dataset.
     # Same data wiring as `pi05_trossen_pack_with_human`; no LoRA, keeps EMA, lower peak LR.
@@ -858,6 +858,86 @@ _CONFIGS = [
             decay_lr=2.5e-6,
         ),
         num_train_steps=30_000,
+        batch_size=64,
+        save_interval=1000,
+        keep_period=5000,
+    ),
+    TrainConfig(
+        name="pi05_trossen_pack_with_human_full_rtc",
+        model=pi0_config.Pi0Config(pi05=True, rtc_prefix_max_length=10),
+        data=LeRobotAlohaDataConfig(
+            use_delta_joint_actions=False,
+            adapt_to_pi=False,
+            repo_id="pack_with_human",
+            assets=AssetsConfig(
+                assets_dir="gs://openpi-assets/checkpoints/pi05_base/assets",
+                asset_id="trossen",
+            ),
+            default_prompt="help a human pack a box",
+            repack_transforms=_transforms.Group(
+                inputs=[
+                    _transforms.RepackTransform(
+                        {
+                            "images": {
+                                "cam_high": "observation.images.cam_high",
+                                "cam_left_wrist": "observation.images.cam_left_wrist",
+                                "cam_right_wrist": "observation.images.cam_right_wrist",
+                            },
+                            "state": "observation.state",
+                            "actions": "action",
+                        }
+                    )
+                ]
+            ),
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_base/params"),
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=1_000,
+            peak_lr=2.5e-5,
+            decay_steps=30_000,
+            decay_lr=2.5e-6,
+        ),
+        num_train_steps=30_000,
+        batch_size=32,
+        save_interval=1000,
+        keep_period=5000,
+    ),
+    TrainConfig(
+        name="pi05_trossen_pack_with_human_full_delta_rtc",
+        model=pi0_config.Pi0Config(pi05=True, rtc_prefix_max_length=10),
+        data=LeRobotAlohaDataConfig(
+            use_delta_joint_actions=True,
+            adapt_to_pi=False,
+            repo_id="pack_with_human",
+            assets=AssetsConfig(
+                assets_dir="./assets/pi05_trossen_pack_with_human_full_delta",
+                asset_id="trossen_delta",
+            ),
+            default_prompt="help a human pack a box",
+            repack_transforms=_transforms.Group(
+                inputs=[
+                    _transforms.RepackTransform(
+                        {
+                            "images": {
+                                "cam_high": "observation.images.cam_high",
+                                "cam_left_wrist": "observation.images.cam_left_wrist",
+                                "cam_right_wrist": "observation.images.cam_right_wrist",
+                            },
+                            "state": "observation.state",
+                            "actions": "action",
+                        }
+                    )
+                ]
+            ),
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_base/params"),
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=1_000,
+            peak_lr=2.5e-5,
+            decay_steps=30_000,
+            decay_lr=2.5e-6,
+        ),
+        num_train_steps=20_000,
         batch_size=64,
         save_interval=1000,
         keep_period=5000,

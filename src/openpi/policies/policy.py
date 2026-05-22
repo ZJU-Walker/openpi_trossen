@@ -62,13 +62,25 @@ class Policy(BasePolicy):
         else:
             # JAX model setup
             self._sample_actions = nnx_utils.module_jit(model.sample_actions)
-            self._rng = rng or jax.random.key(0)
+            self._rng = jax.random.key(0) if rng is None else rng
 
     @override
     def infer(self, obs: dict, *, noise: np.ndarray | None = None) -> dict:  # type: ignore[misc]
         # Make a copy since transformations may modify the inputs in place.
         inputs = jax.tree.map(lambda x: x, obs)
+        action_prefix = inputs.pop("action_prefix", None)
+        has_action_prefix = action_prefix is not None
+        prefix_length = inputs.pop("prefix_length", None)
+        if has_action_prefix:
+            if self._is_pytorch_model:
+                raise NotImplementedError("action_prefix conditioning is only supported for JAX policies.")
+            if "actions" in inputs:
+                raise ValueError("inputs cannot contain both actions and action_prefix during inference.")
+            inputs["actions"] = np.asarray(action_prefix)
+            if prefix_length is None:
+                prefix_length = inputs["actions"].shape[-2]
         inputs = self._input_transform(inputs)
+        action_prefix = inputs.pop("actions", None) if has_action_prefix else None
         if not self._is_pytorch_model:
             # Make a batch and convert to jax.Array.
             inputs = jax.tree.map(lambda x: jnp.asarray(x)[np.newaxis, ...], inputs)
@@ -86,6 +98,18 @@ class Policy(BasePolicy):
             if noise.ndim == 2:  # If noise is (action_horizon, action_dim), add batch dimension
                 noise = noise[None, ...]  # Make it (1, action_horizon, action_dim)
             sample_kwargs["noise"] = noise
+        if action_prefix is not None:
+            action_prefix = np.asarray(action_prefix, dtype=np.float32)
+            prefix_length = min(int(np.asarray(prefix_length).item()), action_prefix.shape[-2], self._model.action_horizon)
+            if action_prefix.shape[-2] > self._model.action_horizon:
+                action_prefix = action_prefix[: self._model.action_horizon]
+            elif action_prefix.shape[-2] < self._model.action_horizon:
+                action_prefix = np.pad(
+                    action_prefix,
+                    ((0, self._model.action_horizon - action_prefix.shape[-2]), (0, 0)),
+                )
+            sample_kwargs["action_prefix"] = jnp.asarray(action_prefix)[None, ...]
+            sample_kwargs["prefix_length"] = jnp.asarray([prefix_length], dtype=jnp.int32)
 
         observation = _model.Observation.from_dict(inputs)
         start_time = time.monotonic()

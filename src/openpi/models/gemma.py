@@ -126,7 +126,13 @@ class RMSNorm(nn.Module):
 
         # adaptive RMSNorm
         modulation = nn.Dense(x.shape[-1] * 3, kernel_init=nn.initializers.zeros, dtype=dtype)(cond)
-        scale, shift, gate = jnp.split(modulation[:, None, :], 3, axis=-1)
+        if modulation.ndim == x.ndim - 1:
+            modulation = modulation[:, None, :]
+        elif modulation.ndim != x.ndim:
+            raise ValueError(
+                f"adarms cond must be batch-level or token-level; got cond shape {cond.shape} for x shape {x.shape}"
+            )
+        scale, shift, gate = jnp.split(modulation, 3, axis=-1)
         normed_inputs = normed_inputs * (1 + scale) + shift  # scale and shift in float32
         return normed_inputs.astype(dtype), gate
 
@@ -392,7 +398,7 @@ class Module(nn.Module):
         embedded: Sequence[at.Float[at.Array, "b _t _d"] | None],
         positions: at.Int[at.Array, "b t"],
         mask: at.Bool[at.Array, "b t s"],
-        adarms_cond: Sequence[at.Float[at.Array, "b _d"] | None] | None = None,
+        adarms_cond: Sequence[at.Float[at.Array, "b ..."] | None] | None = None,
         *,
         kv_cache: KVCache | None = None,
         deterministic: bool = True,
