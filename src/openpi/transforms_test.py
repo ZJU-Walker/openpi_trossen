@@ -26,6 +26,17 @@ def test_delta_actions():
     assert np.all(transformed["actions"] == np.array([[3, 2, 5], [5, 4, 7]]))
 
 
+def test_delta_actions_readonly_actions():
+    actions = np.array([[3, 4, 5], [5, 6, 7]])
+    actions.setflags(write=False)
+    item = {"state": np.array([1, 2, 3]), "actions": actions}
+
+    transformed = _transforms.DeltaActions(mask=[False, True])(item)
+
+    assert transformed["actions"].flags.writeable
+    assert np.all(transformed["actions"] == np.array([[3, 2, 5], [5, 4, 7]]))
+
+
 def test_delta_actions_noop():
     item = {"state": np.array([1, 2, 3]), "actions": np.array([[3, 4, 5], [5, 6, 7]])}
 
@@ -46,6 +57,17 @@ def test_absolute_actions():
     transformed = transform(item)
 
     assert np.all(transformed["state"] == np.array([1, 2, 3]))
+    assert np.all(transformed["actions"] == np.array([[3, 6, 5], [5, 8, 7]]))
+
+
+def test_absolute_actions_readonly_actions():
+    actions = np.array([[3, 4, 5], [5, 6, 7]])
+    actions.setflags(write=False)
+    item = {"state": np.array([1, 2, 3]), "actions": actions}
+
+    transformed = _transforms.AbsoluteActions(mask=[False, True])(item)
+
+    assert transformed["actions"].flags.writeable
     assert np.all(transformed["actions"] == np.array([[3, 6, 5], [5, 8, 7]]))
 
 

@@ -76,7 +76,7 @@ class Policy(BasePolicy):
                 raise NotImplementedError("action_prefix conditioning is only supported for JAX policies.")
             if "actions" in inputs:
                 raise ValueError("inputs cannot contain both actions and action_prefix during inference.")
-            inputs["actions"] = np.asarray(action_prefix)
+            inputs["actions"] = np.array(action_prefix, copy=True)
             if prefix_length is None:
                 prefix_length = inputs["actions"].shape[-2]
         inputs = self._input_transform(inputs)

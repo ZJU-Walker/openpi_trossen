@@ -41,6 +41,7 @@ class WebsocketPolicyServer:
             self._port,
             compression=None,
             max_size=None,
+            ping_interval=None,
             process_request=_health_check,
         ) as server:
             await server.serve_forever()

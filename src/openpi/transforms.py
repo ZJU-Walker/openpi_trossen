@@ -213,7 +213,9 @@ class DeltaActions(DataTransformFn):
         if "actions" not in data or self.mask is None:
             return data
 
-        state, actions = data["state"], data["actions"]
+        state, actions = data["state"], np.asarray(data["actions"])
+        if not actions.flags.writeable:
+            actions = actions.copy()
         mask = np.asarray(self.mask)
         dims = mask.shape[-1]
         actions[..., :dims] -= np.expand_dims(np.where(mask, state[..., :dims], 0), axis=-2)
@@ -235,7 +237,9 @@ class AbsoluteActions(DataTransformFn):
         if "actions" not in data or self.mask is None:
             return data
 
-        state, actions = data["state"], data["actions"]
+        state, actions = data["state"], np.asarray(data["actions"])
+        if not actions.flags.writeable:
+            actions = actions.copy()
         mask = np.asarray(self.mask)
         dims = mask.shape[-1]
         actions[..., :dims] += np.expand_dims(np.where(mask, state[..., :dims], 0), axis=-2)
