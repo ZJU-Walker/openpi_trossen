@@ -235,6 +235,9 @@ class LeRobotAlohaDataConfig(DataConfigFactory):
     # the space used by the pi internal runtime which was used to train the base model. People who
     # use standard Aloha data should set this to true.
     adapt_to_pi: bool = True
+    # Optional transform applied before AlohaInputs. This is useful for deriving prompts from
+    # dataset metadata that AlohaInputs does not preserve.
+    prompt_input_transform: tyro.conf.Suppress[_transforms.DataTransformFn | None] = None
 
     # Repack transforms.
     repack_transforms: tyro.conf.Suppress[_transforms.Group] = dataclasses.field(
@@ -255,8 +258,13 @@ class LeRobotAlohaDataConfig(DataConfigFactory):
 
     @override
     def create(self, assets_dirs: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
+        input_transforms = []
+        if self.prompt_input_transform is not None:
+            input_transforms.append(self.prompt_input_transform)
+        input_transforms.append(aloha_policy.AlohaInputs(adapt_to_pi=self.adapt_to_pi))
+
         data_transforms = _transforms.Group(
-            inputs=[aloha_policy.AlohaInputs(adapt_to_pi=self.adapt_to_pi)],
+            inputs=input_transforms,
             outputs=[aloha_policy.AlohaOutputs(adapt_to_pi=self.adapt_to_pi)],
         )
         if self.use_delta_joint_actions:
@@ -971,6 +979,62 @@ _CONFIGS = [
                             },
                             "state": "observation.state",
                             "actions": "action",
+                        }
+                    )
+                ]
+            ),
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_base/params"),
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=1_000,
+            peak_lr=2.5e-5,
+            decay_steps=20_000,
+            decay_lr=2.5e-6,
+        ),
+        num_train_steps=20_000,
+        batch_size=32,
+        save_interval=1000,
+        keep_period=5000,
+    ),
+    # Marker handover low-level subtask policy. The prompt is injected per frame
+    # from the Qwen subtask segment CSV, so the low-level policy can execute
+    # Qwen labels: keep_open, close, keep_closed, open.
+    TrainConfig(
+        name="pi05_trossen_marker_subtask_full_abs_rtc",
+        model=pi0_config.Pi0Config(pi05=True, action_horizon=50, rtc_prefix_max_length=10),
+        data=LeRobotAlohaDataConfig(
+            use_delta_joint_actions=False,
+            adapt_to_pi=False,
+            repo_id="marker_handover_0526",
+            assets=AssetsConfig(
+                asset_id="trossen_abs_marker_subtask",
+            ),
+            prompt_input_transform=_transforms.PromptFromSubtaskSegments(
+                csv_path="/iris/projects/humanoid/trossen_data/scripts/labels/subtask_segments_0526_auto.csv",
+                episode_offsets={
+                    "data_robot_give_0526": 0,
+                    "data_robot_pull_0526": 30,
+                },
+                subtask_prompts={
+                    "keep_open": "keep the gripper open",
+                    "close": "close the gripper",
+                    "keep_closed": "keep the gripper closed",
+                    "open": "open the gripper",
+                },
+            ),
+            repack_transforms=_transforms.Group(
+                inputs=[
+                    _transforms.RepackTransform(
+                        {
+                            "images": {
+                                "cam_high": "observation.images.cam_high",
+                                "cam_left_wrist": "observation.images.cam_left_wrist",
+                                "cam_right_wrist": "observation.images.cam_right_wrist",
+                            },
+                            "state": "observation.state",
+                            "actions": "action",
+                            "episode_index": "episode_index",
+                            "frame_index": "frame_index",
                         }
                     )
                 ]

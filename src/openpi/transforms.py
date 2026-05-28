@@ -1,5 +1,8 @@
 from collections.abc import Callable, Mapping, Sequence
+import csv
 import dataclasses
+import functools
+import pathlib
 import re
 from typing import Protocol, TypeAlias, TypeVar, runtime_checkable
 
@@ -328,6 +331,81 @@ class PromptFromLeRobotTask(DataTransformFn):
         return {**data, "prompt": prompt}
 
 
+@functools.cache
+def _load_subtask_segments(
+    csv_path: str,
+    episode_offsets: tuple[tuple[str, int], ...],
+    subtask_prompts: tuple[tuple[str, str], ...],
+) -> dict[int, list[tuple[int, int, str]]]:
+    offsets = dict(episode_offsets)
+    prompts = dict(subtask_prompts)
+    segments: dict[int, list[tuple[int, int, str]]] = {}
+
+    with pathlib.Path(csv_path).open(newline="") as f:
+        reader = csv.DictReader(f)
+        required_columns = {"dataset", "episode_id", "start_frame", "end_frame", "subtask"}
+        missing_columns = required_columns - set(reader.fieldnames or ())
+        if missing_columns:
+            raise ValueError(f"Missing subtask segment columns in {csv_path}: {sorted(missing_columns)}")
+
+        for row in reader:
+            dataset = row["dataset"]
+            if dataset not in offsets:
+                raise ValueError(f"Dataset {dataset!r} is missing from episode_offsets")
+
+            subtask = row["subtask"]
+            if subtask not in prompts:
+                raise ValueError(f"Subtask {subtask!r} is missing from subtask_prompts")
+
+            episode_index = offsets[dataset] + int(row["episode_id"])
+            start_frame = int(row["start_frame"])
+            end_frame = int(row["end_frame"])
+            if start_frame > end_frame:
+                raise ValueError(f"Invalid subtask segment range in {csv_path}: {row}")
+
+            segments.setdefault(episode_index, []).append((start_frame, end_frame, prompts[subtask]))
+
+    for episode_index, episode_segments in segments.items():
+        episode_segments.sort()
+        previous_end = -1
+        for start_frame, end_frame, _ in episode_segments:
+            if start_frame <= previous_end:
+                raise ValueError(f"Overlapping subtask segments for episode {episode_index} in {csv_path}")
+            previous_end = end_frame
+
+    return segments
+
+
+@dataclasses.dataclass(frozen=True)
+class PromptFromSubtaskSegments(DataTransformFn):
+    """Injects a prompt from a segment CSV using episode and frame indices."""
+
+    csv_path: str
+    episode_offsets: Mapping[str, int]
+    subtask_prompts: Mapping[str, str]
+
+    def __call__(self, data: DataDict) -> DataDict:
+        if "episode_index" not in data or "frame_index" not in data:
+            raise ValueError('Cannot extract subtask prompt without "episode_index" and "frame_index"')
+
+        episode_index = _scalar_to_int(data["episode_index"])
+        frame_index = _scalar_to_int(data["frame_index"])
+
+        episode_segments = _load_subtask_segments(
+            self.csv_path,
+            tuple(sorted(self.episode_offsets.items())),
+            tuple(sorted(self.subtask_prompts.items())),
+        ).get(episode_index)
+        if episode_segments is None:
+            raise ValueError(f"No subtask segments for episode {episode_index} in {self.csv_path}")
+
+        for start_frame, end_frame, prompt in episode_segments:
+            if start_frame <= frame_index <= end_frame:
+                return {**data, "prompt": prompt}
+
+        raise ValueError(f"No subtask segment for episode {episode_index}, frame {frame_index} in {self.csv_path}")
+
+
 @dataclasses.dataclass(frozen=True)
 class PadStatesAndActions(DataTransformFn):
     """Zero-pads states and actions to the model action dimension."""
@@ -454,6 +532,12 @@ def make_bool_mask(*dims: int) -> tuple[bool, ...]:
         else:
             result.extend([False] * (-dim))
     return tuple(result)
+
+
+def _scalar_to_int(value) -> int:
+    if hasattr(value, "item"):
+        return int(value.item())
+    return int(np.asarray(value).item())
 
 
 def _assert_quantile_stats(norm_stats: at.PyTree[NormStats]) -> None:
