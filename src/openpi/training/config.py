@@ -862,6 +862,7 @@ _CONFIGS = [
         save_interval=1000,
         keep_period=5000,
     ),
+    # TODO RTC abs
     TrainConfig(
         name="pi05_trossen_pack_with_human_full_rtc",
         model=pi0_config.Pi0Config(pi05=True, rtc_prefix_max_length=10),
@@ -902,6 +903,92 @@ _CONFIGS = [
         save_interval=1000,
         keep_period=5000,
     ),
+    # TODO Marker handover (give + pull) — pi05 full FT, delta joint actions, RTC.
+    # Merged dataset at /iris/projects/humanoid/trossen_data/marker_handover_0526.
+    # New asset_id so norm stats don't collide with prior trossen_delta runs.
+    # Run scripts/compute_norm_stats.py for this config name before training.
+    TrainConfig(
+        name="pi05_trossen_marker_handover_full_delta_rtc",
+        model=pi0_config.Pi0Config(pi05=True, rtc_prefix_max_length=10),
+        data=LeRobotAlohaDataConfig(
+            use_delta_joint_actions=True,
+            adapt_to_pi=False,
+            repo_id="marker_handover_0526",
+            assets=AssetsConfig(
+                asset_id="trossen_delta_marker",
+            ),
+            default_prompt="handover the marker",
+            repack_transforms=_transforms.Group(
+                inputs=[
+                    _transforms.RepackTransform(
+                        {
+                            "images": {
+                                "cam_high": "observation.images.cam_high",
+                                "cam_left_wrist": "observation.images.cam_left_wrist",
+                                "cam_right_wrist": "observation.images.cam_right_wrist",
+                            },
+                            "state": "observation.state",
+                            "actions": "action",
+                        }
+                    )
+                ]
+            ),
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_base/params"),
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=1_000,
+            peak_lr=2.5e-5,
+            decay_steps=20_000,
+            decay_lr=2.5e-6,
+        ),
+        num_train_steps=20_000,
+        batch_size=64,
+        save_interval=1000,
+        keep_period=5000,
+    ),
+    # TODO Marker handover (give + pull) — pi05 full FT, absolute joint actions, RTC.
+    # Uses marker-specific absolute-action norm stats under asset_id="trossen_abs_marker".
+    # Run scripts/compute_norm_stats.py for this config name before training.
+    TrainConfig(
+        name="pi05_trossen_marker_handover_full_abs_rtc",
+        model=pi0_config.Pi0Config(pi05=True, rtc_prefix_max_length=10),
+        data=LeRobotAlohaDataConfig(
+            use_delta_joint_actions=False,
+            adapt_to_pi=False,
+            repo_id="marker_handover_0526",
+            assets=AssetsConfig(
+                asset_id="trossen_abs_marker",
+            ),
+            default_prompt="handover the marker",
+            repack_transforms=_transforms.Group(
+                inputs=[
+                    _transforms.RepackTransform(
+                        {
+                            "images": {
+                                "cam_high": "observation.images.cam_high",
+                                "cam_left_wrist": "observation.images.cam_left_wrist",
+                                "cam_right_wrist": "observation.images.cam_right_wrist",
+                            },
+                            "state": "observation.state",
+                            "actions": "action",
+                        }
+                    )
+                ]
+            ),
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_base/params"),
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=1_000,
+            peak_lr=2.5e-5,
+            decay_steps=20_000,
+            decay_lr=2.5e-6,
+        ),
+        num_train_steps=20_000,
+        batch_size=32,
+        save_interval=1000,
+        keep_period=5000,
+    ),
+    # TODO RTC delta
     TrainConfig(
         name="pi05_trossen_pack_with_human_full_delta_rtc",
         model=pi0_config.Pi0Config(pi05=True, rtc_prefix_max_length=10),
