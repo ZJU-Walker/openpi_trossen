@@ -117,8 +117,16 @@ Serve a trained checkpoint as a policy server (run from project root):
 
 ```bash
 uv run scripts/serve_policy.py policy:checkpoint \
-    --policy.config=<config> \
-    --policy.dir=checkpoints/<config>/<exp-name>/29999
+    --policy.config=pi05_trossen_marker_handover_full_delta_rtc_0528 \
+    --policy.dir=/iris/u/kewalk/openpi_trossen/checkpoints/pi05_trossen_marker_handover_full_delta_rtc_0528/pi05_marker_handover_delta_rtc_0528/4000
+
+uv run scripts/serve_policy.py policy:checkpoint \
+    --policy.config=pi05_trossen_marker_handover_full_delta_rtc \
+    --policy.dir=/iris/u/kewalk/openpi_trossen/checkpoints/pi05_trossen_marker_handover_full_delta_rtc/pi05_marker_handover_delta_rtc_0526/15000
+
+uv run scripts/serve_policy.py policy:checkpoint \
+    --policy.config=pi05_trossen_block_mem_full_delta_rtc \
+    --policy.dir=/iris/u/kewalk/openpi_trossen/checkpoints/pi05_trossen_block_mem_full_delta_rtc/pi05_block_mem_delta_rtc/6000
 ```
 
 Client setup (separate venv with LeRobot v0.3.2) is in

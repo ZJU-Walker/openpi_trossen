@@ -80,6 +80,10 @@ class DataConfig:
     model_transforms: _transforms.Group = dataclasses.field(default_factory=_transforms.Group)
     # If true, will use quantile normalization. Otherwise, normal z-score normalization will be used.
     use_quantile_norm: bool = False
+    # Lower bound applied to the per-dimension action/state std when computing norm stats.
+    # 0.0 (default) keeps existing behavior. A small floor (e.g. 1e-3) prevents dead/near-constant
+    # dimensions from blowing up after normalization.
+    std_floor: float = 0.0
 
     # Names of keys that will be used by the data loader to generate the action sequence. The length of the
     # sequence is defined by the `action_horizon` field in the model config. This should be adjusted if your
@@ -170,6 +174,11 @@ class DataConfigFactory(abc.ABC):
     assets: AssetsConfig = dataclasses.field(default_factory=AssetsConfig)
     # Base config that will be updated by the factory.
     base_config: tyro.conf.Suppress[DataConfig | None] = None
+    # If set, overrides the normalization scheme. None (default) falls back to the model-type
+    # default (quantile for everything except PI0). Set False to force z-score normalization.
+    use_quantile_norm: bool | None = None
+    # Lower bound applied to the per-dimension std when computing norm stats. 0.0 (default) is a no-op.
+    std_floor: float = 0.0
 
     @abc.abstractmethod
     def create(self, assets_dirs: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
@@ -183,7 +192,12 @@ class DataConfigFactory(abc.ABC):
             repo_id=repo_id,
             asset_id=asset_id,
             norm_stats=self._load_norm_stats(epath.Path(self.assets.assets_dir or assets_dirs), asset_id),
-            use_quantile_norm=model_config.model_type != ModelType.PI0,
+            use_quantile_norm=(
+                self.use_quantile_norm
+                if self.use_quantile_norm is not None
+                else model_config.model_type != ModelType.PI0
+            ),
+            std_floor=self.std_floor,
         )
 
     def _load_norm_stats(self, assets_dir: epath.Path, asset_id: str | None) -> dict[str, _transforms.NormStats] | None:
@@ -954,6 +968,102 @@ _CONFIGS = [
         save_interval=1000,
         keep_period=5000,
     ),
+    # Marker handover delta + RTC, 0528 normalization fix. Identical to
+    # pi05_trossen_marker_handover_full_delta_rtc except for the norm scheme:
+    #   - use_quantile_norm=False (z-score) instead of pi05's default quantile norm,
+    #   - std_floor=1e-3 so frozen/dead delta dims (q01==q99==0 under quantile, std~1e-5)
+    #     normalize to ~0 instead of blowing up the flow-matching loss (was ~2-3, unstable),
+    #   - new asset_id "trossen_delta_marker_0528" so the prior 0526 stats/checkpoints stay intact.
+    # Run scripts/compute_norm_stats.py pi05_trossen_marker_handover_full_delta_rtc_0528 first.
+    TrainConfig(
+        name="pi05_trossen_marker_handover_full_delta_rtc_0528",
+        model=pi0_config.Pi0Config(pi05=True, rtc_prefix_max_length=10),
+        data=LeRobotAlohaDataConfig(
+            use_delta_joint_actions=True,
+            adapt_to_pi=False,
+            repo_id="marker_handover_0526",
+            assets=AssetsConfig(
+                asset_id="trossen_delta_marker_0528",
+            ),
+            use_quantile_norm=False,
+            std_floor=1e-3,
+            default_prompt="handover the marker",
+            repack_transforms=_transforms.Group(
+                inputs=[
+                    _transforms.RepackTransform(
+                        {
+                            "images": {
+                                "cam_high": "observation.images.cam_high",
+                                "cam_left_wrist": "observation.images.cam_left_wrist",
+                                "cam_right_wrist": "observation.images.cam_right_wrist",
+                            },
+                            "state": "observation.state",
+                            "actions": "action",
+                        }
+                    )
+                ]
+            ),
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_base/params"),
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=1_000,
+            peak_lr=2.5e-5,
+            decay_steps=20_000,
+            decay_lr=2.5e-6,
+        ),
+        num_train_steps=20_000,
+        batch_size=64,
+        save_interval=1000,
+        keep_period=5000,
+    ),
+    # Base policy for the human-pointing block task. Trains on the merged green+yellow
+    # block dataset (/iris/projects/humanoid/trossen_data/0528_merge_block_mem, 61 episodes,
+    # 3 cameras, no cam_low). pi05 full FT, delta joint actions, RTC. Same 0528 norm scheme
+    # as the marker config: z-score (use_quantile_norm=False) + std_floor=1e-3 so the frozen
+    # left-arm dims (constant in this right-arm-only data) normalize to ~0 instead of blowing
+    # up the flow-matching loss. New asset_id so stats don't collide with other trossen runs.
+    # Run scripts/compute_norm_stats.py pi05_trossen_block_mem_full_delta_rtc first.
+    TrainConfig(
+        name="pi05_trossen_block_mem_full_delta_rtc",
+        model=pi0_config.Pi0Config(pi05=True, rtc_prefix_max_length=10),
+        data=LeRobotAlohaDataConfig(
+            use_delta_joint_actions=True,
+            adapt_to_pi=False,
+            repo_id="0528_merge_block_mem",
+            assets=AssetsConfig(
+                asset_id="trossen_delta_block_mem",
+            ),
+            use_quantile_norm=False,
+            std_floor=1e-3,
+            default_prompt="put the block pointed by human to the plate",
+            repack_transforms=_transforms.Group(
+                inputs=[
+                    _transforms.RepackTransform(
+                        {
+                            "images": {
+                                "cam_high": "observation.images.cam_high",
+                                "cam_left_wrist": "observation.images.cam_left_wrist",
+                                "cam_right_wrist": "observation.images.cam_right_wrist",
+                            },
+                            "state": "observation.state",
+                            "actions": "action",
+                        }
+                    )
+                ]
+            ),
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_base/params"),
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=1_000,
+            peak_lr=2.5e-5,
+            decay_steps=20_000,
+            decay_lr=2.5e-6,
+        ),
+        num_train_steps=20_000,
+        batch_size=64,
+        save_interval=1000,
+        keep_period=5000,
+    ),
     # TODO Marker handover (give + pull) — pi05 full FT, absolute joint actions, RTC.
     # Uses marker-specific absolute-action norm stats under asset_id="trossen_abs_marker".
     # Run scripts/compute_norm_stats.py for this config name before training.
@@ -979,6 +1089,49 @@ _CONFIGS = [
                             },
                             "state": "observation.state",
                             "actions": "action",
+                        }
+                    )
+                ]
+            ),
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_base/params"),
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=1_000,
+            peak_lr=2.5e-5,
+            decay_steps=20_000,
+            decay_lr=2.5e-6,
+        ),
+        num_train_steps=20_000,
+        batch_size=32,
+        save_interval=1000,
+        keep_period=5000,
+    ),
+    # Marker handover with the dataset task prompt instead of one fixed
+    # "handover" prompt. Episodes 0-29 are "take the marker from the human"
+    # and episodes 30-59 are "give the marker to the human".
+    TrainConfig(
+        name="pi05_trossen_marker_task_full_abs_rtc",
+        model=pi0_config.Pi0Config(pi05=True, rtc_prefix_max_length=10),
+        data=LeRobotAlohaDataConfig(
+            use_delta_joint_actions=False,
+            adapt_to_pi=False,
+            repo_id="marker_handover_0526",
+            assets=AssetsConfig(
+                asset_id="trossen_abs_marker_task",
+            ),
+            base_config=DataConfig(prompt_from_task=True),
+            repack_transforms=_transforms.Group(
+                inputs=[
+                    _transforms.RepackTransform(
+                        {
+                            "images": {
+                                "cam_high": "observation.images.cam_high",
+                                "cam_left_wrist": "observation.images.cam_left_wrist",
+                                "cam_right_wrist": "observation.images.cam_right_wrist",
+                            },
+                            "state": "observation.state",
+                            "actions": "action",
+                            "prompt": "prompt",
                         }
                     )
                 ]

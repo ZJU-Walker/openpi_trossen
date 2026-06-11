@@ -17,7 +17,10 @@ class NormStats:
 class RunningStats:
     """Compute running statistics of a batch of vectors."""
 
-    def __init__(self):
+    def __init__(self, std_floor: float = 0.0):
+        # Lower bound applied to the per-dimension std in `get_statistics`. Defaults to 0.0
+        # (no-op). Floor dead/near-constant dims so they don't blow up under normalization.
+        self._std_floor = std_floor
         self._count = 0
         self._mean = None
         self._mean_of_squares = None
@@ -82,6 +85,7 @@ class RunningStats:
 
         variance = self._mean_of_squares - self._mean**2
         stddev = np.sqrt(np.maximum(0, variance))
+        stddev = np.maximum(stddev, self._std_floor)
         q01, q99 = self._compute_quantiles([0.01, 0.99])
         return NormStats(mean=self._mean, std=stddev, q01=q01, q99=q99)
 

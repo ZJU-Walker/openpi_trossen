@@ -40,7 +40,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 SERVER_IP = "10.79.12.191"
-PROMPT = "help a human pack a box"
+PROMPT = "handover the marker"
 D_EST = 10
 CHUNK_SIZE = 25
 CONTROL_FREQ = 30

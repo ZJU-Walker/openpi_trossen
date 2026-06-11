@@ -42,7 +42,7 @@ scancel <JOBID>
 ## Check node availability
 
 ```bash
-squeue -w iris-hgx-2 \
+squeue -w iris-hgx-1 \
   -o "%.10i %.12u %.18P %.30j %.2t %.10M %.6D %.20R %.20b"
 ```
 

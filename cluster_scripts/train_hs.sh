@@ -2,7 +2,7 @@
 #SBATCH --job-name=pi05_human_robot_collab
 #SBATCH --output=/iris/u/kewalk/openpi_trossen/logs/placement/pi05-%j.out
 #SBATCH --partition=iris-hi
-#SBATCH --nodelist=iris-hgx-2
+#SBATCH --nodelist=iris-hgx-1,iris-hgx-2,iris7
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1
 #SBATCH --time=2-00:00:00

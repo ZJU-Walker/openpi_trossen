@@ -15,7 +15,7 @@ Mirror of main.py with three changes:
   - --test runs everything but skips robot.send_action()
 
 Usage:
-    python eval_real.py --policy_host iris-hgx-1 --task_prompt "help a human pack a box"
+    python eval_real.py --policy_host iris-hgx-1 --task_prompt "handover the marker"
 """
 
 import argparse
@@ -46,7 +46,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 SERVER_IP = "10.79.12.191"
-PROMPT = "help a human pack a box"
+PROMPT = "handover the marker"
 
 
 class KeyReader:
