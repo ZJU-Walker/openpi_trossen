@@ -15,7 +15,6 @@ import argparse
 import concurrent.futures
 import dataclasses
 import logging
-import math
 import select
 import sys
 import termios
@@ -42,7 +41,7 @@ SERVER_IP = "iris-hgx-1"
 PROMPT = "put the green block to the plate"
 D_EST = 10
 CHUNK_SIZE = 50
-CONTROL_FREQ = 15
+CONTROL_FREQ = 30  # must match the training data fps (0528_merge_block_mem is 30fps)
 
 
 @dataclasses.dataclass
@@ -50,6 +49,7 @@ class PendingChunk:
     future: concurrent.futures.Future
     start_time: float
     d_est: int
+    start_idx: int
 
 
 class KeyReader:
@@ -232,7 +232,9 @@ class TrossenOpenPIRTCBridge:
             action_prefix=prefix,
             prefix_length=len(prefix),
         )
-        self._pending = PendingChunk(future=future, start_time=start_time, d_est=len(prefix))
+        self._pending = PendingChunk(
+            future=future, start_time=start_time, d_est=len(prefix), start_idx=start_idx
+        )
         logger.info(f"RTC request launched: start_idx={start_idx} d_est={len(prefix)}")
 
     def _maybe_accept_async_chunk(self) -> None:
@@ -249,12 +251,21 @@ class TrossenOpenPIRTCBridge:
             logger.exception("Async RTC inference failed; keeping current chunk.")
             return
 
-        d_actual = math.ceil((finish_time - pending.start_time) / self.dt)
+        # Count actions actually consumed since the request was launched; the new
+        # chunk's prefix is conditioned on old_chunk[start_idx:], so new_chunk[d_actual]
+        # is exactly the next action in the committed timeline. (Wall-clock ceil
+        # systematically overshoots by 1 because acceptance polls at step boundaries,
+        # skipping one action per replan.)
+        d_actual = max(0, self.action_chunk_idx - pending.start_idx)
+        elapsed_ms = (finish_time - pending.start_time) * 1000.0
         new_chunk_limit = min(self.chunk_size, len(new_chunk))
         if d_actual <= pending.d_est and d_actual < new_chunk_limit:
             self.current_action_chunk = new_chunk
             self.action_chunk_idx = d_actual
-            logger.info(f"RTC chunk accepted: d_actual={d_actual}, switch_idx={self.action_chunk_idx}")
+            logger.info(
+                f"RTC chunk accepted: d_actual={d_actual}, switch_idx={self.action_chunk_idx}, "
+                f"elapsed={elapsed_ms:.0f}ms"
+            )
             return
 
         if d_actual <= pending.d_est + self.late_tolerance and d_actual < new_chunk_limit - self.stale_margin:
