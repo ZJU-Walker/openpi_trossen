@@ -1,0 +1,976 @@
+{
+  "control_frequency": 30,
+  "chunk_size": 25,
+  "num_steps": 199,
+  "subtask_segments": [
+    {
+      "start": 0,
+      "end": 44,
+      "subtask": "observe_human"
+    },
+    {
+      "start": 45,
+      "end": 198,
+      "subtask": "put_green_block_to_plate"
+    }
+  ],
+  "per_step_subtask": [
+    "observe_human",
+    "observe_human",
+    "observe_human",
+    "observe_human",
+    "observe_human",
+    "observe_human",
+    "observe_human",
+    "observe_human",
+    "observe_human",
+    "observe_human",
+    "observe_human",
+    "observe_human",
+    "observe_human",
+    "observe_human",
+    "observe_human",
+    "observe_human",
+    "observe_human",
+    "observe_human",
+    "observe_human",
+    "observe_human",
+    "observe_human",
+    "observe_human",
+    "observe_human",
+    "observe_human",
+    "observe_human",
+    "observe_human",
+    "observe_human",
+    "observe_human",
+    "observe_human",
+    "observe_human",
+    "observe_human",
+    "observe_human",
+    "observe_human",
+    "observe_human",
+    "observe_human",
+    "observe_human",
+    "observe_human",
+    "observe_human",
+    "observe_human",
+    "observe_human",
+    "observe_human",
+    "observe_human",
+    "observe_human",
+    "observe_human",
+    "observe_human",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate",
+    "put_green_block_to_plate"
+  ],
+  "events": [
+    {
+      "step": 45,
+      "event": "prompt_switch",
+      "from": "wait and observe the human",
+      "to": "put the green block to the plate"
+    },
+    {
+      "step": 48,
+      "event": "discard_stale_prompt"
+    },
+    {
+      "step": 50,
+      "event": "chunk_accept",
+      "d_actual": 4
+    },
+    {
+      "step": 51,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 52,
+      "event": "chunk_accept",
+      "d_actual": 4
+    },
+    {
+      "step": 53,
+      "event": "chunk_accept",
+      "d_actual": 4
+    },
+    {
+      "step": 54,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 55,
+      "event": "chunk_accept",
+      "d_actual": 4
+    },
+    {
+      "step": 56,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 57,
+      "event": "chunk_accept",
+      "d_actual": 4
+    },
+    {
+      "step": 58,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 59,
+      "event": "chunk_accept",
+      "d_actual": 4
+    },
+    {
+      "step": 60,
+      "event": "chunk_accept",
+      "d_actual": 4
+    },
+    {
+      "step": 61,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 62,
+      "event": "chunk_accept",
+      "d_actual": 4
+    },
+    {
+      "step": 63,
+      "event": "chunk_accept",
+      "d_actual": 4
+    },
+    {
+      "step": 64,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 65,
+      "event": "chunk_accept",
+      "d_actual": 4
+    },
+    {
+      "step": 66,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 67,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 68,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 69,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 70,
+      "event": "chunk_accept",
+      "d_actual": 6
+    },
+    {
+      "step": 71,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 72,
+      "event": "chunk_accept",
+      "d_actual": 6
+    },
+    {
+      "step": 73,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 74,
+      "event": "chunk_accept",
+      "d_actual": 6
+    },
+    {
+      "step": 75,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 76,
+      "event": "chunk_accept",
+      "d_actual": 6
+    },
+    {
+      "step": 77,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 78,
+      "event": "chunk_accept",
+      "d_actual": 6
+    },
+    {
+      "step": 79,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 80,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 81,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 82,
+      "event": "chunk_accept",
+      "d_actual": 6
+    },
+    {
+      "step": 83,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 84,
+      "event": "chunk_accept",
+      "d_actual": 6
+    },
+    {
+      "step": 85,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 86,
+      "event": "chunk_accept",
+      "d_actual": 6
+    },
+    {
+      "step": 87,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 88,
+      "event": "chunk_accept",
+      "d_actual": 6
+    },
+    {
+      "step": 89,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 90,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 91,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 92,
+      "event": "chunk_accept",
+      "d_actual": 4
+    },
+    {
+      "step": 93,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 94,
+      "event": "chunk_accept",
+      "d_actual": 4
+    },
+    {
+      "step": 95,
+      "event": "chunk_accept",
+      "d_actual": 6
+    },
+    {
+      "step": 96,
+      "event": "chunk_accept",
+      "d_actual": 4
+    },
+    {
+      "step": 97,
+      "event": "chunk_accept",
+      "d_actual": 6
+    },
+    {
+      "step": 98,
+      "event": "chunk_accept",
+      "d_actual": 4
+    },
+    {
+      "step": 99,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 100,
+      "event": "chunk_accept",
+      "d_actual": 4
+    },
+    {
+      "step": 101,
+      "event": "chunk_accept",
+      "d_actual": 6
+    },
+    {
+      "step": 102,
+      "event": "chunk_accept",
+      "d_actual": 4
+    },
+    {
+      "step": 103,
+      "event": "chunk_accept",
+      "d_actual": 6
+    },
+    {
+      "step": 104,
+      "event": "chunk_accept",
+      "d_actual": 4
+    },
+    {
+      "step": 105,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 106,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 107,
+      "event": "chunk_accept",
+      "d_actual": 4
+    },
+    {
+      "step": 108,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 109,
+      "event": "chunk_accept",
+      "d_actual": 4
+    },
+    {
+      "step": 110,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 111,
+      "event": "chunk_accept",
+      "d_actual": 4
+    },
+    {
+      "step": 112,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 113,
+      "event": "chunk_accept",
+      "d_actual": 4
+    },
+    {
+      "step": 114,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 115,
+      "event": "chunk_accept",
+      "d_actual": 4
+    },
+    {
+      "step": 116,
+      "event": "chunk_accept",
+      "d_actual": 4
+    },
+    {
+      "step": 117,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 118,
+      "event": "chunk_accept",
+      "d_actual": 4
+    },
+    {
+      "step": 119,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 120,
+      "event": "chunk_accept",
+      "d_actual": 4
+    },
+    {
+      "step": 121,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 122,
+      "event": "chunk_accept",
+      "d_actual": 4
+    },
+    {
+      "step": 123,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 124,
+      "event": "chunk_accept",
+      "d_actual": 4
+    },
+    {
+      "step": 125,
+      "event": "chunk_accept",
+      "d_actual": 4
+    },
+    {
+      "step": 126,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 127,
+      "event": "chunk_accept",
+      "d_actual": 4
+    },
+    {
+      "step": 128,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 129,
+      "event": "chunk_accept",
+      "d_actual": 4
+    },
+    {
+      "step": 130,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 131,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 132,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 133,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 134,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 135,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 136,
+      "event": "chunk_accept",
+      "d_actual": 4
+    },
+    {
+      "step": 137,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 138,
+      "event": "chunk_accept",
+      "d_actual": 4
+    },
+    {
+      "step": 139,
+      "event": "chunk_accept",
+      "d_actual": 6
+    },
+    {
+      "step": 140,
+      "event": "chunk_accept",
+      "d_actual": 4
+    },
+    {
+      "step": 141,
+      "event": "chunk_accept",
+      "d_actual": 6
+    },
+    {
+      "step": 142,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 143,
+      "event": "chunk_accept",
+      "d_actual": 6
+    },
+    {
+      "step": 144,
+      "event": "chunk_accept",
+      "d_actual": 4
+    },
+    {
+      "step": 145,
+      "event": "chunk_accept",
+      "d_actual": 6
+    },
+    {
+      "step": 146,
+      "event": "chunk_accept",
+      "d_actual": 4
+    },
+    {
+      "step": 147,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 148,
+      "event": "chunk_accept",
+      "d_actual": 4
+    },
+    {
+      "step": 149,
+      "event": "chunk_accept",
+      "d_actual": 6
+    },
+    {
+      "step": 150,
+      "event": "chunk_accept",
+      "d_actual": 4
+    },
+    {
+      "step": 151,
+      "event": "chunk_accept",
+      "d_actual": 4
+    },
+    {
+      "step": 152,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 153,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 154,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 155,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 156,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 157,
+      "event": "chunk_accept",
+      "d_actual": 4
+    },
+    {
+      "step": 158,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 159,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 160,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 161,
+      "event": "chunk_accept",
+      "d_actual": 4
+    },
+    {
+      "step": 162,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 163,
+      "event": "chunk_accept",
+      "d_actual": 4
+    },
+    {
+      "step": 164,
+      "event": "chunk_accept",
+      "d_actual": 4
+    },
+    {
+      "step": 165,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 166,
+      "event": "chunk_accept",
+      "d_actual": 4
+    },
+    {
+      "step": 167,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 168,
+      "event": "chunk_accept",
+      "d_actual": 4
+    },
+    {
+      "step": 169,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 170,
+      "event": "chunk_accept",
+      "d_actual": 4
+    },
+    {
+      "step": 171,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 172,
+      "event": "chunk_accept",
+      "d_actual": 4
+    },
+    {
+      "step": 173,
+      "event": "chunk_accept",
+      "d_actual": 6
+    },
+    {
+      "step": 174,
+      "event": "chunk_accept",
+      "d_actual": 4
+    },
+    {
+      "step": 175,
+      "event": "chunk_accept",
+      "d_actual": 4
+    },
+    {
+      "step": 176,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 177,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 178,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 179,
+      "event": "chunk_accept",
+      "d_actual": 4
+    },
+    {
+      "step": 180,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 181,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 182,
+      "event": "chunk_accept",
+      "d_actual": 4
+    },
+    {
+      "step": 183,
+      "event": "chunk_accept",
+      "d_actual": 6
+    },
+    {
+      "step": 184,
+      "event": "chunk_accept",
+      "d_actual": 4
+    },
+    {
+      "step": 185,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 186,
+      "event": "chunk_accept",
+      "d_actual": 4
+    },
+    {
+      "step": 187,
+      "event": "chunk_accept",
+      "d_actual": 6
+    },
+    {
+      "step": 188,
+      "event": "chunk_accept",
+      "d_actual": 4
+    },
+    {
+      "step": 189,
+      "event": "chunk_accept",
+      "d_actual": 6
+    },
+    {
+      "step": 190,
+      "event": "chunk_accept",
+      "d_actual": 4
+    },
+    {
+      "step": 191,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 192,
+      "event": "chunk_accept",
+      "d_actual": 4
+    },
+    {
+      "step": 193,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 194,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 195,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 196,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 197,
+      "event": "chunk_accept",
+      "d_actual": 5
+    },
+    {
+      "step": 198,
+      "event": "chunk_accept",
+      "d_actual": 5
+    }
+  ],
+  "num_highlevel_predictions": 122
+}

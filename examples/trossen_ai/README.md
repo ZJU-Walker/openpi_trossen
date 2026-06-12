@@ -273,3 +273,44 @@ If you want to run the client in test mode (no movement, just logs the actions t
 ```bash
 uv run main.py --mode test --task_prompt "grab red cube"
 ```
+## Hierarchical deployment (Qwen3-VL high level → pi0.5 low level)
+
+Real-time two-level control: a finetuned Qwen3-VL predicts the current subtask
+from recent `cam_high` frames (~1-3Hz, served remotely), and the subtask string
+becomes the pi0.5 language prompt, switching mid-episode. Three decoupled
+rates — the high level never blocks the 30Hz control loop, and pi0.5 chunks are
+replanned asynchronously with RTC prefix continuity (including on subtask
+switches; chunks computed for a stale prompt are discarded on arrival).
+
+**1. Start both servers on one GPU node (H100):**
+
+```bash
+bash examples/trossen_ai/launch_hierarchical_servers.sh
+# :8000 pi0.5 (scripts/serve_policy_hierarchical.py — drops the training-time
+#       PromptFromSubtaskSegments transform so obs["prompt"] drives the policy)
+# :8001 Qwen subtask server (Qwen3-VL repo, tools/serve_subtask_predictor.py)
+```
+
+**2a. Robot (on the workstation):**
+
+```bash
+python examples/trossen_ai/eval_real_hierarchical.py \
+    --policy_host <gpu-node> --subtask_host <gpu-node> --test   # then without --test
+# keyboard: n=step  c=continuous  r=replan  q=quit
+```
+
+**2b. Dry run on the cluster (no robot) — replays a LeRobot val episode:**
+
+```bash
+export HF_LEROBOT_HOME=/iris/projects/humanoid/trossen_data
+uv run examples/trossen_ai/eval_real_hierarchical.py \
+    --policy_host localhost --subtask_host localhost --replay-episode 27
+```
+
+Episode logs (states/actions/subtask timeline/RTC events) are written to
+`real_runs/<timestamp>/{episode_log.npz,timeline.json}`.
+
+For driver testing without a GPU for Qwen, `examples/trossen_ai/mock_subtask_server.py`
+replays offline stage-1 predictions over the same protocol. The driver-side
+high-level wrapper (memer-style `reset()`/`step(frame)→subtask` contract) is
+`examples/trossen_ai/hierarchical_highlevel.py`.

@@ -1064,6 +1064,66 @@ _CONFIGS = [
         save_interval=1000,
         keep_period=5000,
     ),
+    # Low-level subtask policy for the human-pointing block task. Same dataset, delta
+    # actions, and norm scheme as pi05_trossen_block_mem_full_delta_rtc (norm stats are
+    # reused from that config's assets dir -- stats only depend on state/actions, not
+    # prompts). The prompt is injected per frame from the manually labeled segment CSV
+    # (3 classes: observe_human, put_green_block_to_plate, put_yellow_block_to_plate),
+    # so a high-level policy can drive this one by emitting the subtask prompts below.
+    TrainConfig(
+        name="pi05_trossen_block_mem_subtask_full_delta_rtc",
+        model=pi0_config.Pi0Config(pi05=True, action_horizon=50, rtc_prefix_max_length=10),
+        data=LeRobotAlohaDataConfig(
+            use_delta_joint_actions=True,
+            adapt_to_pi=False,
+            repo_id="0528_merge_block_mem",
+            assets=AssetsConfig(
+                assets_dir="./assets/pi05_trossen_block_mem_full_delta_rtc",
+                asset_id="trossen_delta_block_mem",
+            ),
+            use_quantile_norm=False,
+            std_floor=1e-3,
+            prompt_input_transform=_transforms.PromptFromSubtaskSegments(
+                csv_path="/iris/projects/humanoid/trossen_data/labels/subtask_segments_0528_merge_manual.csv",
+                episode_offsets={
+                    "0528_merge_block_mem": 0,
+                },
+                subtask_prompts={
+                    "observe_human": "wait and observe the human",
+                    "put_green_block_to_plate": "put the green block to the plate",
+                    "put_yellow_block_to_plate": "put the yellow block to the plate",
+                },
+            ),
+            repack_transforms=_transforms.Group(
+                inputs=[
+                    _transforms.RepackTransform(
+                        {
+                            "images": {
+                                "cam_high": "observation.images.cam_high",
+                                "cam_left_wrist": "observation.images.cam_left_wrist",
+                                "cam_right_wrist": "observation.images.cam_right_wrist",
+                            },
+                            "state": "observation.state",
+                            "actions": "action",
+                            "episode_index": "episode_index",
+                            "frame_index": "frame_index",
+                        }
+                    )
+                ]
+            ),
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_base/params"),
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=1_000,
+            peak_lr=2.5e-5,
+            decay_steps=20_000,
+            decay_lr=2.5e-6,
+        ),
+        num_train_steps=20_000,
+        batch_size=32,
+        save_interval=1000,
+        keep_period=5000,
+    ),
     # TODO Marker handover (give + pull) — pi05 full FT, absolute joint actions, RTC.
     # Uses marker-specific absolute-action norm stats under asset_id="trossen_abs_marker".
     # Run scripts/compute_norm_stats.py for this config name before training.
