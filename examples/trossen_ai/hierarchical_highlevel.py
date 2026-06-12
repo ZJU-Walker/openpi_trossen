@@ -100,6 +100,7 @@ class RemoteHighLevel:
         self._prediction_timestep = -1
         self._num_predictions = 0
         self._last_infer_ms: float | None = None
+        self._last_window: tuple[np.ndarray, list[int]] | None = None
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
 
@@ -157,6 +158,15 @@ class RemoteHighLevel:
         with self._lock:
             return self._prompt_map[slug if slug is not None else self._subtask]
 
+    @property
+    def last_window(self) -> tuple[np.ndarray, list[int]] | None:
+        """The exact (frames, frame_indices) most recently sent to the model."""
+        with self._lock:
+            if self._last_window is None:
+                return None
+            frames, idx = self._last_window
+            return frames.copy(), list(idx)
+
     # ------------------------------------------------------------------ #
     def _snapshot_window(self) -> tuple[np.ndarray, list[int]] | None:
         with self._lock:
@@ -179,6 +189,8 @@ class RemoteHighLevel:
                 continue
             frames, idx = snap
             target_timestep = idx[-1]
+            with self._lock:
+                self._last_window = (frames, idx)
             try:
                 result = self._client.infer({
                     "frames": frames,
