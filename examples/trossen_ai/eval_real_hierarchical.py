@@ -38,6 +38,7 @@ import sys
 import threading
 import time
 
+import cv2
 import numpy as np
 from openpi_client import websocket_client_policy
 import openpi_client.image_tools as image_tools
@@ -51,8 +52,9 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 CHUNK_SIZE = 25
-CONTROL_FREQ = 30
+CONTROL_FREQ = 15
 D_EST = 10
+FORCE_PROMPT_DEFAULT = "put the yellow block to the plate"
 
 
 @dataclasses.dataclass
@@ -188,6 +190,9 @@ class HierarchicalRTCBridge:
         history_seconds: float = 5.0,
         num_frames: int = 5,
         test_mode: bool = False,
+        disable_rtc: bool = False,
+        visualize: bool = True,
+        force_prompt: str | None = None,
         log_dir: pathlib.Path | None = None,
     ):
         self.source = source
@@ -199,6 +204,16 @@ class HierarchicalRTCBridge:
         self.late_tolerance = late_tolerance
         self.max_action_delta = max_action_delta
         self.test_mode = test_mode
+        self.disable_rtc = disable_rtc
+        self.visualize = visualize
+        self.force_prompt = force_prompt
+        if force_prompt is not None:
+            logger.info(f"Low-level prompt FORCED to {force_prompt!r}; high level still runs "
+                        "for display but does not drive the prompt.")
+        self._viz_window = "high cam (subtask)"
+        if disable_rtc:
+            logger.info("RTC disabled: plain blocking chunk inference "
+                        "(execute full chunk, then request next; replan on prompt switch).")
         self.log_dir = log_dir
 
         logger.info(f"Connecting to pi0.5 policy server at {policy_host}:{policy_port}")
@@ -342,6 +357,40 @@ class HierarchicalRTCBridge:
             return
         self.source.send_action(action)
 
+    def gravity_compensation_warmup(self, duration: float = 3.0) -> None:
+        """Enable gravity comp so the user can hand-place the follower arm before rollout."""
+        if duration <= 0:
+            return
+        robot = getattr(self.source, "robot", None)
+        if robot is None:  # replay source has no real arms
+            logger.info("No real robot; skipping gravity-compensation warm-up.")
+            return
+
+        logger.info(f"Gravity compensation enabled for {duration:.1f}s. "
+                    "Move the follower arm to the desired initial pose.")
+        for arm in robot.follower_arms.values():
+            # In the Trossen LeRobot fork, Torque_Enable=0 switches the arm to
+            # external_effort mode (zero external effort); the driver still
+            # compensates for gravity and friction so the arm is hand-movable.
+            arm.write("Torque_Enable", 0)
+
+        end_time = time.monotonic() + duration
+        last_seconds = None
+        while time.monotonic() < end_time:
+            remaining = max(0, int(math.ceil(end_time - time.monotonic())))
+            if remaining != last_seconds:
+                logger.info(f"Choose initial pose: {remaining}s remaining")
+                last_seconds = remaining
+            time.sleep(0.05)
+
+        logger.info("Locking the selected initial pose...")
+        for name, arm in robot.follower_arms.items():
+            current_position = arm.read("Present_Position").astype(np.float32)
+            arm.write("Torque_Enable", 1)
+            arm.write("Goal_Position", current_position)
+            logger.info(f"Locked {name} follower arm at: "
+                        f"{np.round(current_position, decimals=4).tolist()}")
+
     def move_to_start_position(self, goal_position: np.ndarray, duration: float = 5.0) -> None:
         from scipy.interpolate import PchipInterpolator
 
@@ -360,10 +409,12 @@ class HierarchicalRTCBridge:
         self._latest_obs = obs
 
         slug = self.highlevel.step(obs["hl_frame"])
-        prompt = self.highlevel.lowlevel_prompt(slug)
+        prompt = self.force_prompt if self.force_prompt is not None \
+            else self.highlevel.lowlevel_prompt(slug)
         if self.active_prompt is None:
             self.active_prompt = prompt
-            logger.info(f"Initial subtask: {slug!r} -> prompt {prompt!r}")
+            logger.info(f"Initial subtask: {slug!r} -> prompt {prompt!r}"
+                        + (" (FORCED)" if self.force_prompt is not None else ""))
         elif prompt != self.active_prompt:
             logger.info(f"PROMPT SWITCH at step {self.episode_step}: "
                         f"{self.active_prompt!r} -> {prompt!r}")
@@ -373,10 +424,17 @@ class HierarchicalRTCBridge:
             # In-flight request (if any) now carries a stale prompt; it will be
             # discarded on arrival and the launch loop below re-requests with
             # the new prompt + prefix continuity from the executing chunk.
+            # Without RTC there is no in-flight request, so drop the stale chunk
+            # outright and re-request synchronously with the new prompt.
+            if self.disable_rtc:
+                self.replan()
 
-        self._maybe_accept_async_chunk()
+        self._render_highlevel(slug, obs)
+
+        if not self.disable_rtc:
+            self._maybe_accept_async_chunk()
         if self.current_action_chunk is None or self.action_chunk_idx >= self._active_chunk_limit():
-            if self._pending is not None:
+            if not self.disable_rtc and self._pending is not None:
                 action = self._hold_action_while_pending()
                 self._record(obs, action, slug)
                 return action
@@ -384,7 +442,7 @@ class HierarchicalRTCBridge:
             self.action_chunk_idx = 0
             self._holding_pending_logged = False
 
-        if continuous_mode:
+        if continuous_mode and not self.disable_rtc:
             self._launch_async_request(self.active_prompt)
             self._maybe_accept_async_chunk()
 
@@ -395,6 +453,79 @@ class HierarchicalRTCBridge:
             self._late_rate_limit_steps -= 1
         self._record(obs, action, slug)
         return action
+
+    @staticmethod
+    def _to_hwc(img: np.ndarray) -> np.ndarray:
+        """Coerce an image to HWC uint8 (handles CHW and float inputs)."""
+        img = np.asarray(img)
+        if img.ndim == 3 and img.shape[0] == 3 and img.shape[-1] != 3:
+            img = np.transpose(img, (1, 2, 0))
+        if np.issubdtype(img.dtype, np.floating):
+            img = (img * 255.0).clip(0, 255)
+        return np.ascontiguousarray(img.astype(np.uint8))
+
+    @staticmethod
+    def _tile_row(images: list, labels: list, tile: int = 224) -> np.ndarray | None:
+        """Resize each image to tile x tile, label it, and hconcat into one row."""
+        cells = []
+        for img, label in zip(images, labels):
+            cell = cv2.resize(HierarchicalRTCBridge._to_hwc(img), (tile, tile))
+            cv2.putText(cell, label, (4, 18), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                        (0, 0, 0), 3, cv2.LINE_AA)
+            cv2.putText(cell, label, (4, 18), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                        (0, 255, 0), 1, cv2.LINE_AA)
+            cells.append(cell)
+        return np.hstack(cells) if cells else None
+
+    def _render_highlevel(self, slug: str, obs: dict) -> None:
+        """Show everything fed to the models: high-level history window + low-level images."""
+        if not self.visualize:
+            return
+
+        # High-level row: the exact frames most recently sent to the Qwen model.
+        win = self.highlevel.last_window
+        if win is not None:
+            frames, idx = win
+            hl_row = self._tile_row(list(frames), [f"HL t={i}" for i in idx])
+        else:
+            hl_row = self._tile_row([obs["hl_frame"]], ["HL (warming up)"])
+
+        # Low-level row: the 3 camera images fed to pi0.5 (CHW 224 -> HWC).
+        ll_imgs = list(obs["images"].values())
+        ll_labels = [f"LL {cam}" for cam in obs["images"]]
+        ll_row = self._tile_row(ll_imgs, ll_labels)
+
+        rows = [r for r in (hl_row, ll_row) if r is not None]
+        if not rows:
+            return
+        width = max(r.shape[1] for r in rows)
+        rows = [r if r.shape[1] == width
+                else np.hstack([r, np.zeros((r.shape[0], width - r.shape[1], 3), np.uint8)])
+                for r in rows]
+
+        age = self.highlevel.status.age_steps
+        header = np.zeros((96, width, 3), np.uint8)
+        if self.force_prompt is not None:
+            subtask_line = f"subtask(pred): {slug}  [FORCED]"
+            prompt_line = f"prompt: {self.force_prompt}"
+        else:
+            subtask_line = f"subtask: {slug}"
+            prompt_line = f"prompt: {self.highlevel.lowlevel_prompt(slug)}"
+        lines = [subtask_line, prompt_line,
+                 f"step {self.episode_step}  age {age}  preds {self.highlevel.status.num_predictions}"]
+        y = 26
+        for text in lines:
+            cv2.putText(header, text, (10, y), cv2.FONT_HERSHEY_SIMPLEX, 0.6,
+                        (0, 255, 0), 1, cv2.LINE_AA)
+            y += 26
+
+        canvas = np.vstack([header, *rows])
+        try:
+            cv2.imshow(self._viz_window, cv2.cvtColor(canvas, cv2.COLOR_RGB2BGR))
+            cv2.waitKey(1)
+        except cv2.error:  # headless / no display available
+            logger.warning("No display available; disabling visualization.")
+            self.visualize = False
 
     def _record(self, obs: dict, action: np.ndarray, slug: str) -> None:
         self._log_states.append(np.asarray(obs["state"], dtype=np.float32))
@@ -416,11 +547,13 @@ class HierarchicalRTCBridge:
         logger.info(f"Replay finished: {self.episode_step} steps, "
                     f"{self.highlevel.status.num_predictions} high-level predictions")
 
-    def run_robot(self) -> None:
+    def run_robot(self, gravity_comp_time: float = 3.0) -> None:
         """Interactive robot episode (keyboard controls from eval_real_RTC.py)."""
         import select
         import termios
         import tty
+
+        self.gravity_compensation_warmup(duration=gravity_comp_time)
 
         class KeyReader:
             def __init__(self):
@@ -524,6 +657,8 @@ class HierarchicalRTCBridge:
     def cleanup(self) -> None:
         self.highlevel.stop()
         self._executor.shutdown(wait=False, cancel_futures=True)
+        if self.visualize:
+            cv2.destroyAllWindows()
         self.save_logs()
         self.source.close()
 
@@ -547,6 +682,22 @@ def main() -> None:
     parser.add_argument("--replay-repo-id", default="0528_merge_block_mem")
     parser.add_argument("--test", action="store_true",
                         help="Don't move the robot; log what would have been sent.")
+    parser.add_argument("--visual_only", action="store_true",
+                        help="Verify the pipeline (capture + high level + inference + "
+                             "visualization) without ever sending actions to the robot.")
+    parser.add_argument("--disable_rtc", action="store_true",
+                        help="Turn off async real-time chunking; use plain blocking "
+                             "chunk inference (replan on subtask/prompt switch).")
+    parser.add_argument("--gravity_comp_time", type=float, default=3.0,
+                        help="Seconds of gravity compensation at start for hand-placing "
+                             "the follower arm at the initial pose (robot only).")
+    parser.add_argument("--no_viz", action="store_true",
+                        help="Disable the high-cam window with the subtask overlay.")
+    parser.add_argument("--force_prompt", default=None, nargs="?",
+                        const=FORCE_PROMPT_DEFAULT,
+                        help="Pin the low-level prompt (high level still runs for display but "
+                             f"does not drive it). Bare flag defaults to {FORCE_PROMPT_DEFAULT!r}; "
+                             "pass a string to override.")
     parser.add_argument("--log-dir", default=None,
                         help="Default: real_runs/<timestamp>/")
     args = parser.parse_args()
@@ -557,7 +708,7 @@ def main() -> None:
         default_log = f"real_runs/replay_ep{args.replay_episode}_{time.strftime('%m%d_%H%M%S')}"
     else:
         source = RobotSource()
-        test_mode = args.test
+        test_mode = args.test or args.visual_only
         default_log = f"real_runs/robot_{time.strftime('%m%d_%H%M%S')}"
 
     bridge = HierarchicalRTCBridge(
@@ -575,13 +726,16 @@ def main() -> None:
         history_seconds=args.history_seconds,
         num_frames=args.num_frames,
         test_mode=test_mode,
+        disable_rtc=args.disable_rtc,
+        visualize=not args.no_viz,
+        force_prompt=args.force_prompt,
         log_dir=pathlib.Path(args.log_dir or default_log),
     )
     try:
         if args.replay_episode is not None:
             bridge.run_replay()
         else:
-            bridge.run_robot()
+            bridge.run_robot(gravity_comp_time=args.gravity_comp_time)
     finally:
         bridge.cleanup()
 
