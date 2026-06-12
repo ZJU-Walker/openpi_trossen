@@ -19,7 +19,7 @@ QWEN_ROOT=${QWEN_ROOT:-/iris/projects/humanoid/Qwen3-VL/qwen-vl-finetune}
 QWEN_ENV=${QWEN_ENV:-/iris/projects/humanoid/miniconda3/envs/qwen3vl}
 
 PI05_CONFIG=${PI05_CONFIG:-pi05_trossen_block_mem_subtask_full_delta_rtc}
-PI05_CKPT=${PI05_CKPT:-checkpoints/pi05_trossen_block_mem_subtask_full_delta_rtc/pi05_block_mem_subtask_delta_rtc/5000}
+PI05_CKPT=${PI05_CKPT:-checkpoints/pi05_trossen_block_mem_subtask_full_delta_rtc/pi05_block_mem_subtask_delta_rtc/15000}
 QWEN_CKPT=${QWEN_CKPT:-output/qwen3vl-8b-trossen-merge-block-subtask-0528-3cls-hist5-5f-3xh100/checkpoint-400}
 
 PI05_PORT=${PI05_PORT:-8000}
