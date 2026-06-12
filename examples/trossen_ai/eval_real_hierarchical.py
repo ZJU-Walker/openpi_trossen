@@ -52,7 +52,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 CHUNK_SIZE = 25
-CONTROL_FREQ = 15
+CONTROL_FREQ = 30  # must match the training data fps (0528_merge_block_mem is 30fps)
 D_EST = 10
 FORCE_PROMPT_DEFAULT = "put the yellow block to the plate"
 
@@ -63,6 +63,7 @@ class PendingChunk:
     start_time: float
     d_est: int
     prompt: str
+    start_idx: int
 
 
 # --------------------------------------------------------------------------- #
@@ -290,7 +291,7 @@ class HierarchicalRTCBridge:
         future = self._executor.submit(
             self.request_chunk, prompt, action_prefix=prefix, prefix_length=len(prefix))
         self._pending = PendingChunk(future=future, start_time=time.monotonic(),
-                                     d_est=len(prefix), prompt=prompt)
+                                     d_est=len(prefix), prompt=prompt, start_idx=start_idx)
 
     def _maybe_accept_async_chunk(self) -> None:
         if self._pending is None or not self._pending.future.done():
@@ -314,11 +315,18 @@ class HierarchicalRTCBridge:
             self._log_events.append({"step": self.episode_step, "event": "discard_stale_prompt"})
             return
 
-        d_actual = math.ceil((finish_time - pending.start_time) / self.dt)
+        # Count actions actually consumed since the request was launched; the new
+        # chunk's prefix is conditioned on old_chunk[start_idx:], so new_chunk[d_actual]
+        # is exactly the next action in the committed timeline. (Wall-clock ceil
+        # systematically overshoots by 1 because acceptance polls at step boundaries,
+        # skipping one action per replan.)
+        d_actual = max(0, self.action_chunk_idx - pending.start_idx)
+        elapsed_ms = (finish_time - pending.start_time) * 1000.0
         new_chunk_limit = min(self.chunk_size, len(new_chunk))
         if d_actual <= pending.d_est and d_actual < new_chunk_limit:
             self.current_action_chunk = new_chunk
             self.action_chunk_idx = d_actual
+            logger.info(f"RTC chunk accepted: d_actual={d_actual}, elapsed={elapsed_ms:.0f}ms")
             self._log_events.append({"step": self.episode_step, "event": "chunk_accept",
                                      "d_actual": d_actual})
             return
