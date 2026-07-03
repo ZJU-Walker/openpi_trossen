@@ -124,10 +124,19 @@ uv run scripts/serve_policy.py policy:checkpoint \
     --policy.config=pi05_trossen_marker_handover_full_delta_rtc \
     --policy.dir=/iris/u/kewalk/openpi_trossen/checkpoints/pi05_trossen_marker_handover_full_delta_rtc/pi05_marker_handover_delta_rtc_0526/15000
 
-uv run scripts/serve_policy.py policy:checkpoint \
-    --policy.config=pi05_trossen_block_mem_subtask_full_delta_rtc \
-    --policy.dir=/iris/u/kewalk/openpi_trossen/checkpoints/pi05_trossen_block_mem_subtask_full_delta_rtc/pi05_block_mem_subtask_delta_rtc/15000
+# Subtask checkpoint: do NOT use serve_policy.py here -- the subtask config injects
+# per-frame training prompts via PromptFromSubtaskSegments, which needs dataset
+# episode/frame indices and crashes on live observations. The hierarchical wrapper
+# drops that transform so the prompt comes from obs["prompt"] (or --default_prompt):
+uv run scripts/serve_policy_hierarchical.py \
+    --config=pi05_trossen_block_mem_subtask_full_delta_rtc \
+    --dir=/iris/u/kewalk/openpi_trossen/checkpoints/pi05_trossen_block_mem_subtask_full_delta_rtc/pi05_block_mem_subtask_delta_rtc/15000 \
+    --port=8000
 ```
+
+The subtask checkpoint was trained on exactly three prompts -- clients must send
+one of them verbatim: `"wait and observe the human"`,
+`"put the green block to the plate"`, `"put the yellow block to the plate"`.
 
 Client setup (separate venv with LeRobot v0.3.2) is in
 [`examples/trossen_ai/README.md`](examples/trossen_ai/README.md).
@@ -197,6 +206,54 @@ RTC notes:
 - `--d_est 10` matches the RTC training prefix range (`d=0..10`); lower it if inference is usually faster.
 - `--chunk_size` caps how many actions are executed open-loop before replanning. Smaller values are more reactive; larger values are smoother but less reactive.
 - Keep `--test` for dry runs; remove it only when ready to send actions to the robot.
+
+### Real robot, RTC with gravity-comp warmup (low level only, fixed prompt)
+
+`eval_real_RTC_working_warmup.py` is the RTC client plus a gravity-compensation
+warm-up: the follower arms go torque-free for `--gravity_comp_time` seconds so
+you can hand-place the initial pose, then lock and start the rollout. Use it to
+drive the subtask checkpoint standalone (serve it with
+`serve_policy_hierarchical.py` as in step 4):
+
+```bash
+python examples/trossen_ai/eval_real_RTC_working_warmup.py \
+    --policy_host <host> \
+    --task_prompt "put the green block to the plate" \
+    --gravity_comp_time 5 \
+    --test
+```
+
+Notes:
+
+- Keep `--control_freq` at the default 30 -- it must match the dataset fps
+  (running at 15 plays actions at half speed and breaks the RTC index
+  bookkeeping, which shows up as jerky motion).
+- `--task_prompt` must be one of the three subtask training prompts (see step 4).
+
+### Real robot, hierarchical (Qwen3-VL high level -> pi0.5 low level)
+
+The high-level Qwen3-VL subtask predictor picks the prompt every step; the
+pi0.5 low-level policy executes it with async RTC. On the GPU node, launch both
+servers (pi0.5 on `:8000` via `serve_policy_hierarchical.py`, Qwen on `:8001`):
+
+```bash
+bash examples/trossen_ai/launch_hierarchical_servers.sh
+```
+
+Then on the robot workstation:
+
+```bash
+python examples/trossen_ai/eval_real_hierarchical.py \
+    --policy_host <host> --subtask_host <host> --test
+```
+
+Useful flags: `--force_prompt [PROMPT]` pins the low-level prompt (the high
+level still runs for display only); `--visual_only` exercises the full pipeline
+without sending actions; `--disable_rtc` switches to plain blocking chunk
+inference; `--replay-episode N` dry-runs against a dataset episode with no
+robot. Per-episode logs (states/actions/subtask timeline) land in
+`real_runs/<timestamp>/`. More detail in
+[`examples/trossen_ai/README.md`](examples/trossen_ai/README.md).
 
 ## Troubleshooting
 
