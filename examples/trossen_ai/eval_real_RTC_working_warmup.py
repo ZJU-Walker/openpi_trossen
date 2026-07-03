@@ -38,10 +38,10 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 SERVER_IP = "iris-hgx-1"
-PROMPT = "put the green block to the plate"
+PROMPT = "put the block pointed by the human to the plate"
 D_EST = 10
 CHUNK_SIZE = 50
-CONTROL_FREQ = 30  # must match the training data fps (0528_merge_block_mem is 30fps)
+CONTROL_FREQ = 5  # must match the training data fps (0528_merge_block_mem is 30fps)
 
 
 @dataclasses.dataclass
@@ -120,6 +120,11 @@ class TrossenOpenPIRTCBridge:
         self._request_lock = threading.Lock()
         self._holding_pending_logged = False
 
+        # Latest camera frames (BGR) for live display. Written from any thread
+        # in get_observation(); read + imshow only from the main thread.
+        self._latest_frames: dict[str, np.ndarray] = {}
+        self._frames_lock = threading.Lock()
+
     def gravity_compensation_warmup(self, duration: float = 5.0) -> None:
         """Allow the user to manually place the follower arm before rollout."""
         if duration <= 0:
@@ -184,11 +189,15 @@ class TrossenOpenPIRTCBridge:
         state = obs["observation.state"].detach().cpu().numpy().astype(np.float32)
 
         images = {}
+        frames = {}
         for cam in self.cameras:
             img = obs[f"observation.images.{cam}"].detach().cpu().numpy()
             img = image_tools.resize_with_pad(img, height=224, width=224)
-            cv2.imwrite(f"{cam}.jpg", cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
+            # Stash a BGR copy of exactly what the model sees for live display.
+            frames[cam] = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
             images[cam] = np.transpose(img, (2, 0, 1))
+        with self._frames_lock:
+            self._latest_frames = frames
 
         result = {"state": state, "images": images, "prompt": task_prompt}
         if action_prefix is not None and prefix_length is not None and prefix_length > 0:
@@ -301,6 +310,19 @@ class TrossenOpenPIRTCBridge:
         delta = np.clip(action - self.last_action, -self.max_action_delta, self.max_action_delta)
         return (self.last_action + delta).astype(np.float32)
 
+    def _show_frames(self, scale: int = 2) -> None:
+        """Display the latest camera frames. MUST be called from the main thread."""
+        with self._frames_lock:
+            frames = dict(self._latest_frames)
+        for cam, bgr in frames.items():
+            if scale != 1:
+                bgr = cv2.resize(
+                    bgr, (bgr.shape[1] * scale, bgr.shape[0] * scale),
+                    interpolation=cv2.INTER_NEAREST,
+                )
+            cv2.imshow(f"cam: {cam}", bgr)
+        cv2.waitKey(1)
+
     def execute_action(self, action: np.ndarray) -> None:
         action = np.asarray(action, dtype=np.float32)
         self.last_action = action
@@ -381,6 +403,7 @@ class TrossenOpenPIRTCBridge:
 
                 action = self._next_action(task_prompt, continuous_mode=continuous_mode)
                 self.execute_action(action)
+                self._show_frames()
 
                 self.episode_step += 1
                 logger.info(f"step {self.episode_step}  chunk_idx={self.action_chunk_idx - 1}")
@@ -391,6 +414,7 @@ class TrossenOpenPIRTCBridge:
     def cleanup(self) -> None:
         logger.info("Cleaning up...")
         self._executor.shutdown(wait=False, cancel_futures=True)
+        cv2.destroyAllWindows()
         self.robot.disconnect()
 
 
